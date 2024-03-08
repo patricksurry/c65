@@ -49,7 +49,7 @@ The two-byte `blknum` supports a maximum addressable file size of 64Mb.
 A portable (cross-platform) check for blkio is writing 1 to `status`,
 then writing 0 to `action` and finally checking if `status` is 0.
 
-You can boot from a blkio file by adding the following snipped to
+You can boot from a blkio file by adding the following snippet to
 the end of `forth_code/user_words.fs`:
 
     \ if blkio is available and block 0 starts with the bytes 'TF'
