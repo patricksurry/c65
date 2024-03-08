@@ -45,9 +45,30 @@ value is returned. Four actions are currently supported:
 Note that an external blockfile must be specified with the `-b ...` option
 to enable block IO. The file is simply a binary file with block k
 mapped to offset k*1024 through (k+1)*1024-1.
-Thea two-byte `blknum` supports a maximum addressable file size of 64Mb.
-A portable (cross-platform) check for blkio is writing 0x1 to `status`,
-then writing 0x0 to `action` and finally checking for `status = 0`.
+The two-byte `blknum` supports a maximum addressable file size of 64Mb.
+A portable (cross-platform) check for blkio is writing 1 to `status`,
+then writing 0 to `action` and finally checking if `status` is 0.
+
+You can boot from a blkio file by adding the following snipped to
+the end of `forth_code/user_words.fs`:
+
+    \ if blkio is available and block 0 starts with the bytes 'TF'
+    \ `evaluate` the remainder of block 0 as a zero-terminated string
+    \ Tequires the word asciiz> ( addr -- addr n )
+
+    : blkrw ( blk buf action -- )
+        -rot $c014 ! $c012 ! $c010 !
+    ;
+    :noname
+        1 $c011 c! 0 $c010 c! $c011 c@ 0= if  \ blkio available?
+            0 $1000 1 blkrw
+            $1000 @ $4654 = if                \ starts with magic "TF" ?
+                $1002 asciiz> evaluate else   \ run the block
+                ." bad boot block" CR
+            then else
+            ." no block device" CR
+        then
+    ; execute
 
 ## Profiling
 
