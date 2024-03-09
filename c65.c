@@ -182,6 +182,9 @@ int main(int argc, char *argv[]) {
   //    show_cpu(&ctx);
   show_cpu();
 
+  if (fblk)
+    fclose(fblk);
+
   fout = fopen("c65-coverage.dat", "wb");
   fwrite(rws, sizeof(int), 65536, fout);
   fclose(fout);
