@@ -57,7 +57,7 @@ the end of `forth_code/user_words.fs`:
     \ Tequires the word asciiz> ( addr -- addr n )
 
     : blkrw ( blk buf action -- )
-        -rot $c014 ! $c012 ! $c010 !
+        -rot $c014 ! $c012 ! $c010 c!
     ;
     :noname
         1 $c011 c! 0 $c010 c! $c011 c@ 0= if  \ blkio available?

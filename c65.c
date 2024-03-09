@@ -60,10 +60,12 @@ void write6502(uint16_t addr, uint8_t val) {
         blkiop->status = 0;
         if (val == 1 || val == 2) {
           fseek(fblk, 1024 * blkiop->blknum, SEEK_SET);
-          if (val == 1)
+          if (val == 1) {
             fread(memory + blkiop->bufptr, 1024, 1, fblk);
-          else
+          } else {
             fwrite(memory + blkiop->bufptr, 1024, 1, fblk);
+            fflush(fblk);
+          }
         }
       }
     }
