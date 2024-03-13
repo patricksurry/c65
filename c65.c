@@ -88,12 +88,13 @@ void write6502(uint16_t addr, uint8_t val) {
 }
 
 void show_cpu() {
-  printf("\nPC=%04x A=%02x X=%02x Y=%02x S=%02x FLAGS=<N%d V%d B%d D%d I%d Z%d "
-         "C%d> ticks=%u\n",
-         pc, a, x, y, sp, status & FLAG_SIGN ? 1 : 0,
-         status & FLAG_OVERFLOW ? 1 : 0, status & FLAG_BREAK ? 1 : 0,
-         status & FLAG_DECIMAL ? 1 : 0, status & FLAG_INTERRUPT ? 1 : 0,
-         status & FLAG_ZERO ? 1 : 0, status & FLAG_CARRY ? 1 : 0, ticks);
+  printf(
+      "c65: PC=%04x A=%02x X=%02x Y=%02x S=%02x FLAGS=<N%d V%d B%d D%d I%d Z%d "
+      "C%d> ticks=%u\n",
+      pc, a, x, y, sp, status & FLAG_SIGN ? 1 : 0,
+      status & FLAG_OVERFLOW ? 1 : 0, status & FLAG_BREAK ? 1 : 0,
+      status & FLAG_DECIMAL ? 1 : 0, status & FLAG_INTERRUPT ? 1 : 0,
+      status & FLAG_ZERO ? 1 : 0, status & FLAG_CARRY ? 1 : 0, ticks);
 }
 
 int main(int argc, char *argv[]) {
