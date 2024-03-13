@@ -7,8 +7,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <readline/readline.h>
-
 uint8_t memory[65536];
 int rws[65536];
 int writes[65536];
