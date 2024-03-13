@@ -13,7 +13,9 @@ uint8_t memory[65536];
 int rws[65536];
 int writes[65536];
 
-int getc_addr = 0xf004, putc_addr = 0xf001, blkio_addr = 0xf010, ticks = 0;
+int getc_addr = 0xf004, putc_addr = 0xf001, blkio_addr = 0xf010,
+    tstart_addr = 0xf006, tstop_addr = 0xf007, timer_addr = 0xf008, ticks = 0,
+    mark = 0, shutdown = 0;
 
 /*
 blkio supports the following action values.  write the action value
@@ -38,11 +40,20 @@ FILE *fblk = NULL;
 
 uint8_t read6502(uint16_t addr) {
   char buf[1];
-  int ch;
+  int ch, delta;
   if (addr == getc_addr) {
-    ch = (uint8_t)getchar();
+    ch = getchar();
+    shutdown = (ch == EOF);
     ch = ch == 10 ? 13 : ch;
-    memory[addr] = ch;
+    memory[addr] = (uint8_t)ch;
+  } else if (addr == tstart_addr) {
+    mark = ticks;
+  } else if (addr == tstop_addr) {
+    delta = ticks - mark;
+    memory[timer_addr] = (uint8_t)((delta >> 16) & 0xff);
+    memory[timer_addr + 1] = (uint8_t)((delta >> 24) & 0xff);
+    memory[timer_addr + 2] = (uint8_t)((delta >> 0) & 0xff);
+    memory[timer_addr + 3] = (uint8_t)((delta >> 8) & 0xff);
   }
   rws[addr] += 1;
   return memory[addr];
@@ -55,6 +66,7 @@ void write6502(uint16_t addr, uint8_t val) {
     putc((int)val, stdout);
   } else if (addr == blkio_addr) {
     blkiop->status = 0xff;
+    shutdown = val == 0xff;
     if (fblk) {
       if (val < 3) {
         blkiop->status = 0;
@@ -175,11 +187,10 @@ int main(int argc, char *argv[]) {
   show_cpu();
   reset6502();
   show_cpu();
-  //    while (ctx.emu.clockticks != cycles && mfio->action != 0xff)
-  //    fake6502_step(&ctx);
-  while (ticks != max_ticks && blkiop->action != 0xff)
+
+  while (ticks != max_ticks && !shutdown)
     ticks += step6502();
-  //    show_cpu(&ctx);
+
   show_cpu();
 
   if (fblk)
