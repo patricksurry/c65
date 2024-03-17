@@ -12,8 +12,7 @@ int rws[65536];
 int writes[65536];
 
 int getc_addr = 0xf004, putc_addr = 0xf001, blkio_addr = 0xf010,
-    tstart_addr = 0xf006, tstop_addr = 0xf007, timer_addr = 0xf008, ticks = 0,
-    mark = 0, shutdown = 0;
+    timer_addr = 0xf006, ticks = 0, mark = 0, shutdown = 0;
 
 /*
 blkio supports the following action values.  write the action value
@@ -44,14 +43,14 @@ uint8_t read6502(uint16_t addr) {
     shutdown = (ch == EOF);
     ch = ch == 10 ? 13 : ch;
     memory[addr] = (uint8_t)ch;
-  } else if (addr == tstart_addr) {
+  } else if (addr == timer_addr /* start timer */) {
     mark = ticks;
-  } else if (addr == tstop_addr) {
+  } else if (addr == timer_addr + 1 /* stop timer */) {
     delta = ticks - mark;
-    memory[timer_addr] = (uint8_t)((delta >> 16) & 0xff);
-    memory[timer_addr + 1] = (uint8_t)((delta >> 24) & 0xff);
-    memory[timer_addr + 2] = (uint8_t)((delta >> 0) & 0xff);
-    memory[timer_addr + 3] = (uint8_t)((delta >> 8) & 0xff);
+    memory[timer_addr + 2] = (uint8_t)((delta >> 16) & 0xff);
+    memory[timer_addr + 3] = (uint8_t)((delta >> 24) & 0xff);
+    memory[timer_addr + 4] = (uint8_t)((delta >> 0) & 0xff);
+    memory[timer_addr + 5] = (uint8_t)((delta >> 8) & 0xff);
   }
   rws[addr] += 1;
   return memory[addr];
@@ -101,7 +100,7 @@ int main(int argc, char *argv[]) {
   const char *romfile = NULL, *blkfile = NULL;
   int addr = -1, reset = -1, max_ticks = -1, errflg = 0, sz = 0, c;
 
-  while ((c = getopt(argc, argv, ":r:a:g:t:i:o:x:b:")) != -1) {
+  while ((c = getopt(argc, argv, ":r:a:g:t:i:o:x:c:b:")) != -1) {
     switch (c) {
     case 'r':
       romfile = optarg;
@@ -127,6 +126,9 @@ int main(int argc, char *argv[]) {
     case 'x':
       blkio_addr = strtol(optarg, NULL, 0);
       break;
+    case 'c':
+      timer_addr = strtol(optarg, NULL, 0);
+      break;
     case ':': /* -f or -o without operand */
       fprintf(stderr, "Option -%c requires an argument\n", optopt);
       errflg++;
@@ -140,18 +142,20 @@ int main(int argc, char *argv[]) {
     errflg++;
 
   if (errflg) {
-    fprintf(stderr,
-            "Usage: c65 -r file.rom [...]\n"
-            "Options:\n"
-            "-?              : Show this message\n"
-            "-r <file>       : Load file to memory and reset into it\n"
-            "-a <address>    : Address to load (default top of address space)\n"
-            "-g <address>    : Set reset vector @ 0xfffc to <address>\n"
-            "-t <ticks>      : Run for max ticks (default forever)\n"
-            "-i <address>    : magic read for getc (default 0xf004)\n"
-            "-o <address>    : magic write for putc (default 0xf001)\n"
-            "-x <address>    : magic blk device (default 0xf010)\n"
-            "-b <file>       : binary block file backing blk device");
+    fprintf(
+        stderr,
+        "Usage: c65 -r file.rom [...]\n"
+        "Options:\n"
+        "-?         : Show this message\n"
+        "-r <file>  : Load file to memory and reset into it\n"
+        "-a <addr>  : Address to load (default top of address space)\n"
+        "-g <addr>  : Set reset vector @ 0xfffc to <address>\n"
+        "-t <ticks> : Run for max ticks (default forever)\n"
+        "-i <addr>  : magic read for getc (default 0xf004)\n"
+        "-o <addr>  : magic write for putc (default 0xf001)\n"
+        "-c <addr>  : magic r/w for cycle counting (6 bytes; default 0xf006) 0x"
+        "-x <addr>  : magic blk device (6 bytes; default 0xf010)\n"
+        "-b <file>  : binary block file backing blk device");
     exit(2);
   }
 
