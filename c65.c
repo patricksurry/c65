@@ -1,4 +1,5 @@
 #include "fake65c02.h"
+#include "io.h"
 
 #include <fcntl.h>
 #include <stdint.h>
@@ -39,9 +40,11 @@ uint8_t read6502(uint16_t addr) {
   char buf[1];
   int ch, delta;
   if (addr == getc_addr) {
-    ch = getchar();
+    while (!_kbhit()) {
+    }
+    ch = _getc();
     shutdown = (ch == EOF);
-    ch = ch == 10 ? 13 : ch;
+    /* ch = ch == 10 ? 13 : ch; */
     memory[addr] = (uint8_t)ch;
   } else if (addr == timer_addr /* start timer */) {
     mark = ticks;
@@ -60,7 +63,7 @@ void write6502(uint16_t addr, uint8_t val) {
   char *line;
   int n;
   if (addr == putc_addr) {
-    putc((int)val, stdout);
+    _putc(val);
   } else if (addr == blkio_addr) {
     blkiop->status = 0xff;
     shutdown = val == 0xff;
@@ -191,6 +194,7 @@ int main(int argc, char *argv[]) {
   reset6502();
   show_cpu();
 
+  set_terminal_nb();
   while (ticks != max_ticks && !shutdown)
     ticks += step6502();
 
