@@ -87,3 +87,22 @@ with some examples of exploring this data.
 ## Notes
 
 Note I also tried a version based on https://github.com/omarandlorraine/fake6502 but it seems to have some subtle bug. It runs most of TaliForth in 65c02 mode but `: foo 3 2 + ;` fails with a stack underflow.
+
+Windows setup
+
+Set up WSL as explained at:
+
+https://learn.microsoft.com/en-us/windows/wsl/setup/environment
+
+Start ubuntu and install build tools:
+
+ubuntu
+sudo apt-get install build-essential
+
+Change to the folder where you cloned taliforth, e.g. in the windows file system. Then build c65 and run taliforth binary:
+
+cd /mnt/c/Users/patri/tali
+cd c65
+make
+cd ..
+c65/c65 -r taliforth-py65mon.bin
