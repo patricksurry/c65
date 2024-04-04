@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
   int addr = -1, reset = -1, max_ticks = -1, errflg = 0, sz = 0, c;
   int io = 0xf000;
 
-  while ((c = getopt(argc, argv, ":r:a:g:t:i:o:x:c:b:")) != -1) {
+  while ((c = getopt(argc, argv, ":r:a:g:t:m:b:")) != -1) {
     switch (c) {
     case 'r':
       romfile = optarg;
