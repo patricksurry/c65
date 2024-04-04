@@ -16,12 +16,31 @@ and resets to the address stored at $fffc. This corresponds exactly to
 Various options control the simulator (use `c65 -?` for up-to-date details):
 
     -a <address>    # load the rom file at a specific address
-    -g <address>    # change the reset vector at $fffc
+    -g <address>    # set the reset vector at $fffc
     -t <ticks>      # stop after ticks cycles (default forever)
-    -i <address>    # change the magic getc address (default 0xf004)
-    -o <address>    # change the magic putc putc address (default 0xf001)
-    -x <address>    # change the block io base address (default 0xf010)
+    -m <address>    # change the magic IO base address (default $f000)
     -b <file>       # provide a block file to enable blockio
+
+## Magic IO
+
+c65 provides a magic IO block that spans a 22 byte range
+and is normally based at $f000. Use `-m` to change the base address.
+This supports a number of IO functions:
+
+    Addr    Name    Description
+
+    $f001   putc    Writing here sends the byte to stdout
+    $f004   getc    Reading here blocks on an byte from stdin
+    $f005   peekc   Non-blocking read, bit7=1 if ready with 7bit character
+
+    $f006   start   Reading here starts the cycle counter
+    $f007   stop    Reading here stops the cycle counter
+    $f008-b cycles  Current 32 bit cycle count in NUXI order
+
+    $f010   blkio   Write here to initiate a block IO action (see below)
+    $f011   status  Read block IO status here
+    $f012-3 blknum  Block number to read/write
+    $f014-5 buffer  Start of 1024 byte memory buffer to read/write
 
 ## Block IO
 
@@ -40,7 +59,7 @@ value is returned. Four actions are currently supported:
 - status (0): check blkio status returning 0x0 if enabled, 0xff otherwise
 - read (1): read the 1024 byte block @ blknum to bufptr
 - write (2): write the 1024 byte block @ blknum from bufptr
-- exit ($ff): exit from the simulator, dumping profiling data
+- exit ($ff): shutdown the simulator and dump profiling data
 
 Note that an external blockfile must be specified with the `-b ...` option
 to enable block IO. The file is simply a binary file with block k
