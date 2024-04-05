@@ -26,7 +26,7 @@ void set_terminal_nb() {
   /* see https://man7.org/linux/man-pages/man3/tcsetattr.3.html */
   /* we want something close to cfmakeraw but we'll keep ONLCR and SIGINT etc */
   new_termios.c_iflag &= ~(PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
-  new_termios.c_oflag &= ~OPOST;
+  new_termios.c_oflag |= OPOST | ONLCR;
   new_termios.c_lflag &= ~(ECHO | ECHONL | ICANON | IEXTEN);
   new_termios.c_cflag &= ~(CSIZE | PARENB);
   new_termios.c_cflag |= CS8;
@@ -60,9 +60,4 @@ int _getc() {
   return r < 0 ? r : c;
 }
 
-void _putc(char ch) {
-  /* optional? doesn't seem to work with termios c_oflag ONLCR etc */
-  if (ch == 10)
-    putchar(13);
-  putchar((int)ch);
-}
+void _putc(char ch) { putchar((int)ch); }
