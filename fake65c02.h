@@ -1,6 +1,6 @@
 /* LICENSING NOTICE:
 
-	This file contains changes incorporated from the non public domain 
+	This file contains changes incorporated from the non public domain
 	Commander X16 emulator.
 
 	However, the fake6502 code in their repository is still marked public domain!
@@ -238,7 +238,7 @@ typedef unsigned int uint32;
 ushort pc;
 uint8 sp, a, x, y, status;
 /*helper variables*/
-uint32 instructions = 0; 
+uint32 instructions = 0;
 uint32 clockticks6502 = 0;
 uint32 clockgoal6502 = 0;
 ushort oldpc, ea, reladdr, value, result;
@@ -253,9 +253,9 @@ void hookexternal(void *funcptr);
 #else
 static ushort pc;
 static uint8 sp, a, x, y, status;
-static uint32 instructions = 0; 
+static uint32 instructions = 0;
 static uint32 clockticks6502 = 0;
-static uint32 clockgoal6502 = 0; 
+static uint32 clockgoal6502 = 0;
 static ushort oldpc, ea, reladdr, value, result;
 static uint8 opcode, oldstatus, waiting6502 = 0;
 #endif
@@ -317,15 +317,15 @@ static void (*optable[256])();
 static uint8 penaltyop, penaltyaddr;
 
 /*addressing mode functions, calculates effective addresses*/
-static void imp() { 
+static void imp() {
 }
 
 /*addressing mode functions, calculates effective addresses*/
-static void acc() { 
+static void acc() {
 }
 
 /*addressing mode functions, calculates effective addresses*/
-static void imm() { 
+static void imm() {
     ea = pc++;
 }
 
@@ -357,7 +357,7 @@ static void absx() { /*absolute,X*/
     startpage = ea & 0xFF00;
     ea += (ushort)x;
 
-    if (startpage != (ea & 0xFF00)) { /*one cycle penlty for page-crossing on some opcodes*/
+    if (startpage != (ea & 0xFF00)) { /*one cycle penalty for page-crossing on some opcodes*/
         penaltyaddr = 1;
     }
 
@@ -370,7 +370,7 @@ static void absy() { /*absolute,Y*/
     startpage = ea & 0xFF00;
     ea += (ushort)y;
 
-    if (startpage != (ea & 0xFF00)) { /*one cycle penlty for page-crossing on some opcodes*/
+    if (startpage != (ea & 0xFF00)) { /*one cycle penalty for page-crossing on some opcodes*/
         penaltyaddr = 1;
     }
 
@@ -400,7 +400,7 @@ static void indy() { /* (indirect),Y*/
     startpage = ea & 0xFF00;
     ea += (ushort)y;
 
-    if (startpage != (ea & 0xFF00)) { /*one cycle penlty for page-crossing on some opcodes*/
+    if (startpage != (ea & 0xFF00)) { /*one cycle penalty for page-crossing on some opcodes*/
         penaltyaddr = 1;
     }
 }
@@ -462,10 +462,10 @@ static void and() {
     penaltyop = 1;
     value = getvalue();
     result = (ushort)a & value;
-   
+
     zerocalc(result);
     signcalc(result);
-   
+
     saveaccum(result);
 }
 
@@ -476,7 +476,7 @@ static void asl() {
     carrycalc(result);
     zerocalc(result);
     signcalc(result);
-   
+
     putvalue(result);
 }
 
@@ -594,7 +594,7 @@ static void cmp() {
     penaltyop = 1;
     value = getvalue();
     result = (ushort)a - value;
-   
+
     if (a >= (uint8)(value & 0x00FF)) setcarry();
         else clearcarry();
     if (a == (uint8)(value & 0x00FF)) setzero();
@@ -605,7 +605,7 @@ static void cmp() {
 static void cpx() {
     value = getvalue();
     result = (ushort)x - value;
-   
+
     if (x >= (uint8)(value & 0x00FF)) setcarry();
         else clearcarry();
     if (x == (uint8)(value & 0x00FF)) setzero();
@@ -616,7 +616,7 @@ static void cpx() {
 static void cpy() {
     value = getvalue();
     result = (ushort)y - value;
-   
+
     if (y >= (uint8)(value & 0x00FF)) setcarry();
         else clearcarry();
     if (y == (uint8)(value & 0x00FF)) setzero();
@@ -627,23 +627,23 @@ static void cpy() {
 static void dec() {
     value = getvalue();
     result = value - 1;
-   
+
     zerocalc(result);
     signcalc(result);
-   
+
     putvalue(result);
 }
 
 static void dex() {
     x--;
-   
+
     zerocalc(x);
     signcalc(x);
 }
 
 static void dey() {
     y--;
-   
+
     zerocalc(y);
     signcalc(y);
 }
@@ -652,33 +652,33 @@ static void eor() {
     penaltyop = 1;
     value = getvalue();
     result = (ushort)a ^ value;
-   
+
     zerocalc(result);
     signcalc(result);
-   
+
     saveaccum(result);
 }
 
 static void inc() {
     value = getvalue();
     result = value + 1;
-   
+
     zerocalc(result);
     signcalc(result);
-   
+
     putvalue(result);
 }
 
 static void inx() {
     x++;
-   
+
     zerocalc(x);
     signcalc(x);
 }
 
 static void iny() {
     y++;
-   
+
     zerocalc(y);
     signcalc(y);
 }
@@ -697,7 +697,7 @@ static void lda() {
     penaltyop = 1;
     value = getvalue();
     a = (uint8)(value & 0x00FF);
-   
+
     zerocalc(a);
     signcalc(a);
 }
@@ -706,7 +706,7 @@ static void ldx() {
     penaltyop = 1;
     value = getvalue();
     x = (uint8)(value & 0x00FF);
-   
+
     zerocalc(x);
     signcalc(x);
 }
@@ -715,7 +715,7 @@ static void ldy() {
     penaltyop = 1;
     value = getvalue();
     y = (uint8)(value & 0x00FF);
-   
+
     zerocalc(y);
     signcalc(y);
 }
@@ -723,12 +723,12 @@ static void ldy() {
 static void lsr() {
     value = getvalue();
     result = value >> 1;
-   
+
     if (value & 1) setcarry();
         else clearcarry();
     zerocalc(result);
     signcalc(result);
-   
+
     putvalue(result);
 }
 
@@ -749,10 +749,10 @@ static void ora() {
     penaltyop = 1;
     value = getvalue();
     result = (ushort)a | value;
-   
+
     zerocalc(result);
     signcalc(result);
-   
+
     saveaccum(result);
 }
 
@@ -766,7 +766,7 @@ static void php() {
 
 static void pla() {
     a = pull_6502_8();
-   
+
     zerocalc(a);
     signcalc(a);
 }
@@ -778,23 +778,23 @@ static void plp() {
 static void rol() {
     value = getvalue();
     result = (value << 1) | (status & FLAG_CARRY);
-   
+
     carrycalc(result);
     zerocalc(result);
     signcalc(result);
-   
+
     putvalue(result);
 }
 
 static void ror() {
     value = getvalue();
     result = (value >> 1) | ((status & FLAG_CARRY) << 7);
-   
+
     if (value & 1) setcarry();
         else clearcarry();
     zerocalc(result);
     signcalc(result);
-   
+
     putvalue(result);
 }
 
@@ -818,8 +818,8 @@ static void sbc() {
      	value = getvalue(); B = value; value = value ^ 0x00FF;
     	result_dec = (ushort)a + value + C;
 		/*Both Cmos and Nmos*/
-    	carrycalc(result_dec); 
-    	overflowcalc(result_dec, a, value); 
+    	carrycalc(result_dec);
+    	overflowcalc(result_dec, a, value);
 		/*SEQUENCE 4 IS CMOS ONLY*/
     	AL = (A & 0x0F) - (B & 0x0F) + C - 1; /*4a*/
     	A = A - B + C - 1; /*4b*/
@@ -866,28 +866,28 @@ static void sty() {
 
 static void tax() {
     x = a;
-   
+
     zerocalc(x);
     signcalc(x);
 }
 
 static void tay() {
     y = a;
-   
+
     zerocalc(y);
     signcalc(y);
 }
 
 static void tsx() {
     x = sp;
-   
+
     zerocalc(x);
     signcalc(x);
 }
 
 static void txa() {
     a = x;
-   
+
     zerocalc(a);
     signcalc(a);
 }
@@ -898,7 +898,7 @@ static void txs() {
 
 static void tya() {
     a = y;
-   
+
     zerocalc(a);
     signcalc(a);
 }
@@ -941,7 +941,7 @@ static void phx() {
 
 static void plx() {
     x = pull_6502_8();
-   
+
     zerocalc(x);
     signcalc(x);
 }
@@ -952,7 +952,7 @@ static void phy() {
 
 static void ply() {
     y = pull_6502_8();
-  
+
     zerocalc(y);
     signcalc(y);
 }
@@ -1051,31 +1051,32 @@ static void rmb7() { putvalue(getvalue() & ~0x80); }
 
 static void (*addrtable[256])() = {
 /*        |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |     */
-/* 0 */     imp, indx,  imp,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imp, abso, abso, abso,zprel, /* 0 */
+/* 0 */     imp, indx,  imm,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imp, abso, abso, abso,zprel, /* 0 */
 /* 1 */     rel, indy, ind0,  imp,   zp,  zpx,  zpx,   zp,  imp, absy,  acc,  imp, abso, absx, absx,zprel, /* 1 */
-/* 2 */    abso, indx,  imp,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imp, abso, abso, abso,zprel, /* 2 */
+/* 2 */    abso, indx,  imm,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imp, abso, abso, abso,zprel, /* 2 */
 /* 3 */     rel, indy, ind0,  imp,  zpx,  zpx,  zpx,   zp,  imp, absy,  acc,  imp, absx, absx, absx,zprel, /* 3 */
-/* 4 */     imp, indx,  imp,  imp,  imp,   zp,   zp,   zp,  imp,  imm,  acc,  imp, abso, abso, abso,zprel, /* 4 */
-/* 5 */     rel, indy, ind0,  imp,  imp,  zpx,  zpx,   zp,  imp, absy,  imp,  imp,  imp, absx, absx,zprel, /* 5 */
-/* 6 */     imp, indx,  imp,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imp,  ind, abso, abso,zprel, /* 6 */
+/* 4 */     imp, indx,  imm,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imp, abso, abso, abso,zprel, /* 4 */
+/* 5 */     rel, indy, ind0,  imp,  zpx,  zpx,  zpx,   zp,  imp, absy,  imp,  imp, abso, absx, absx,zprel, /* 5 */
+/* 6 */     imp, indx,  imm,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imp,  ind, abso, abso,zprel, /* 6 */
 /* 7 */     rel, indy, ind0,  imp,  zpx,  zpx,  zpx,   zp,  imp, absy,  imp,  imp, ainx, absx, absx,zprel, /* 7 */
-/* 8 */     rel, indx,  imp,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imp, abso, abso, abso,zprel, /* 8 */
+/* 8 */     rel, indx,  imm,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imp, abso, abso, abso,zprel, /* 8 */
 /* 9 */     rel, indy, ind0,  imp,  zpx,  zpx,  zpy,   zp,  imp, absy,  imp,  imp, abso, absx, absx,zprel, /* 9 */
 /* A */     imm, indx,  imm,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imp, abso, abso, abso,zprel, /* A */
 /* B */     rel, indy, ind0,  imp,  zpx,  zpx,  zpy,   zp,  imp, absy,  imp,  imp, absx, absx, absy,zprel, /* B */
-/* C */     imm, indx,  imp,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imp, abso, abso, abso,zprel, /* C */
-/* D */     rel, indy, ind0,  imp,  imp,  zpx,  zpx,   zp,  imp, absy,  imp,  imp,  imp, absx, absx,zprel, /* D */
-/* E */     imm, indx,  imp,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imp, abso, abso, abso,zprel, /* E */
-/* F */     rel, indy, ind0,  imp,  imp,  zpx,  zpx,   zp,  imp, absy,  imp,  imp,  imp, absx, absx,zprel  /* F */
+/* C */     imm, indx,  imm,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imp, abso, abso, abso,zprel, /* C */
+/* D */     rel, indy, ind0,  imp,  zpx,  zpx,  zpx,   zp,  imp, absy,  imp,  imp, abso, absx, absx,zprel, /* D */
+/* E */     imm, indx,  imm,  imp,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imp, abso, abso, abso,zprel, /* E */
+/* F */     rel, indy, ind0,  imp,  zpx,  zpx,  zpx,   zp,  imp, absy,  imp,  imp, abso, absx, absx,zprel  /* F */
 };
 
 /*
 	NOTE: the "db6502" instruction is *supposed* to be "wait until hardware reset"
+	NOTE: updated nops per http://www.6502.org/tutorials/65c02opcodes.html#9
 */
 
 static void (*optable[256])() = {
 /*        |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |     */
-/* 0 */      brk_6502,  ora,  nop,  nop,  tsb,  ora,  asl, rmb0,  php,  ora,  asl,  nop,  tsb,  ora,  asl, bbr0, /* 0 */
+/* 0 */ brk_6502,  ora,  nop,  nop,  tsb,  ora,  asl, rmb0,  php,  ora,  asl,  nop,  tsb,  ora,  asl, bbr0, /* 0 */
 /* 1 */      bpl,  ora,  ora,  nop,  trb,  ora,  asl, rmb1,  clc,  ora,  inc,  nop,  trb,  ora,  asl, bbr1, /* 1 */
 /* 2 */      jsr,  and,  nop,  nop,  bit,  and,  rol, rmb2,  plp,  and,  rol,  nop,  bit,  and,  rol, bbr2, /* 2 */
 /* 3 */      bmi,  and,  and,  nop,  bit,  and,  rol, rmb3,  sec,  and,  dec,  nop,  bit,  and,  rol, bbr3, /* 3 */
@@ -1083,34 +1084,34 @@ static void (*optable[256])() = {
 /* 5 */      bvc,  eor,  eor,  nop,  nop,  eor,  lsr, rmb5,  cli,  eor,  phy,  nop,  nop,  eor,  lsr, bbr5, /* 5 */
 /* 6 */      rts,  adc,  nop,  nop,  stz,  adc,  ror, rmb6,  pla,  adc,  ror,  nop,  jmp,  adc,  ror, bbr6, /* 6 */
 /* 7 */      bvs,  adc,  adc,  nop,  stz,  adc,  ror, rmb7,  sei,  adc,  ply,  nop,  jmp,  adc,  ror, bbr7, /* 7 */
-/* 8 */      bra,  sta,  nop,  nop,  sty,  sta,  stx, smb0,  dey,  bit_imm,  txa,  nop,  sty,  sta,  stx, bbs0, /* 8 */
+/* 8 */      bra,  sta,  nop,  nop,  sty,  sta,  stx, smb0,  dey,bit_imm,txa,  nop,  sty,  sta,  stx, bbs0, /* 8 */
 /* 9 */      bcc,  sta,  sta,  nop,  sty,  sta,  stx, smb1,  tya,  sta,  txs,  nop,  stz,  sta,  stz, bbs1, /* 9 */
 /* A */      ldy,  lda,  ldx,  nop,  ldy,  lda,  ldx, smb2,  tay,  lda,  tax,  nop,  ldy,  lda,  ldx, bbs2, /* A */
 /* B */      bcs,  lda,  lda,  nop,  ldy,  lda,  ldx, smb3,  clv,  lda,  tsx,  nop,  ldy,  lda,  ldx, bbs3, /* B */
 /* C */      cpy,  cmp,  nop,  nop,  cpy,  cmp,  dec, smb4,  iny,  cmp,  dex,  wai,  cpy,  cmp,  dec, bbs4, /* C */
-/* D */      bne,  cmp,  cmp,  nop,  nop,  cmp,  dec, smb5,  cld,  cmp,  phx,  db6502,  nop,  cmp,  dec, bbs5, /* D */
+/* D */      bne,  cmp,  cmp,  nop,  nop,  cmp,  dec, smb5,  cld,  cmp,  phx,db6502, nop,  cmp,  dec, bbs5, /* D */
 /* E */      cpx,  sbc,  nop,  nop,  cpx,  sbc,  inc, smb6,  inx,  sbc,  nop,  nop,  cpx,  sbc,  inc, bbs6, /* E */
 /* F */      beq,  sbc,  sbc,  nop,  nop,  sbc,  inc, smb7,  sed,  sbc,  plx,  nop,  nop,  sbc,  inc, bbs7  /* F */
 };
 
 static const uint32 ticktable[256] = {
 /*        |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |     */
-/* 0 */      7,    6,    2,    2,    5,    3,    5,    5,    3,    2,    2,    2,    6,    4,    6,    2, /* 0 */
-/* 1 */      2,    5,    5,    2,    5,    4,    6,    5,    2,    4,    2,    2,    6,    4,    7,    2, /* 1 */
-/* 2 */      6,    6,    2,    2,    3,    3,    5,    5,    4,    2,    2,    2,    4,    4,    6,    2, /* 2 */
-/* 3 */      2,    5,    5,    2,    4,    4,    6,    5,    2,    4,    2,    2,    4,    4,    7,    2, /* 3 */
-/* 4 */      6,    6,    2,    2,    2,    3,    5,    5,    3,    2,    2,    2,    3,    4,    6,    2, /* 4 */
-/* 5 */      2,    5,    5,    2,    2,    4,    6,    5,    2,    4,    3,    2,    2,    4,    7,    2, /* 5 */
-/* 6 */      6,    6,    2,    2,    3,    3,    5,    5,    4,    2,    2,    2,    6,    4,    6,    2, /* 6 */
-/* 7 */      2,    5,    5,    2,    4,    4,    6,    5,    2,    4,    4,    2,    6,    4,    7,    2, /* 7 */
-/* 8 */      3,    6,    2,    2,    3,    3,    3,    5,    2,    2,    2,    2,    4,    4,    4,    2, /* 8 */
-/* 9 */      2,    6,    5,    2,    4,    4,    4,    5,    2,    5,    2,    2,    4,    5,    5,    2, /* 9 */
-/* A */      2,    6,    2,    2,    3,    3,    3,    5,    2,    2,    2,    2,    4,    4,    4,    2, /* A */
-/* B */      2,    5,    5,    2,    4,    4,    4,    5,    2,    4,    2,    2,    4,    4,    4,    2, /* B */
-/* C */      2,    6,    2,    2,    3,    3,    5,    5,    2,    2,    2,    3,    4,    4,    6,    2, /* C */
-/* D */      2,    5,    5,    2,    2,    4,    6,    5,    2,    4,    3,    1,    2,    4,    7,    2, /* D */
-/* E */      2,    6,    2,    2,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    2, /* E */
-/* F */      2,    5,    5,    2,    2,    4,    6,    5,    2,    4,    4,    2,    2,    4,    7,    2  /* F */
+/* 0 */      7,    6,    2,    1,    5,    3,    5,    5,    3,    2,    2,    1,    6,    4,    6,    2, /* 0 */
+/* 1 */      2,    5,    5,    1,    5,    4,    6,    5,    2,    4,    2,    1,    6,    4,    7,    2, /* 1 */
+/* 2 */      6,    6,    2,    1,    3,    3,    5,    5,    4,    2,    2,    1,    4,    4,    6,    2, /* 2 */
+/* 3 */      2,    5,    5,    1,    4,    4,    6,    5,    2,    4,    2,    1,    4,    4,    7,    2, /* 3 */
+/* 4 */      6,    6,    2,    1,    3,    3,    5,    5,    3,    2,    2,    1,    3,    4,    6,    2, /* 4 */
+/* 5 */      2,    5,    5,    1,    4,    4,    6,    5,    2,    4,    3,    1,    8,    4,    7,    2, /* 5 */
+/* 6 */      6,    6,    2,    1,    3,    3,    5,    5,    4,    2,    2,    1,    6,    4,    6,    2, /* 6 */
+/* 7 */      2,    5,    5,    1,    4,    4,    6,    5,    2,    4,    4,    1,    6,    4,    7,    2, /* 7 */
+/* 8 */      3,    6,    2,    1,    3,    3,    3,    5,    2,    2,    2,    1,    4,    4,    4,    2, /* 8 */
+/* 9 */      2,    6,    5,    1,    4,    4,    4,    5,    2,    5,    2,    1,    4,    5,    5,    2, /* 9 */
+/* A */      2,    6,    2,    1,    3,    3,    3,    5,    2,    2,    2,    1,    4,    4,    4,    2, /* A */
+/* B */      2,    5,    5,    1,    4,    4,    4,    5,    2,    4,    2,    2,    4,    4,    4,    2, /* B */
+/* C */      2,    6,    2,    1,    3,    3,    5,    5,    2,    2,    2,    3,    4,    4,    6,    2, /* C */
+/* D */      2,    5,    5,    1,    4,    4,    6,    5,    2,    4,    3,    1,    4,    4,    7,    2, /* D */
+/* E */      2,    6,    2,    1,    3,    3,    5,    5,    2,    2,    2,    1,    4,    4,    6,    2, /* E */
+/* F */      2,    5,    5,    1,    4,    4,    6,    5,    2,    4,    4,    1,    4,    4,    7,    2  /* F */
 };
 
 
@@ -1139,7 +1140,7 @@ void irq6502() {
 		pc = (ushort)read6502(0xFFFE) | ((ushort)read6502(0xFFFF) << 8);
 		waiting6502 = 0;
 	}
-	
+
 }
 
 uint8 callexternal = 0;
@@ -1184,7 +1185,7 @@ uint32 step6502() {
     clockticks6502 += ticktable[opcode];
     /*The following line goes commented out in Mike Chamber's usage of the 6502 emulator for MOARNES*/
     if (penaltyop && penaltyaddr) clockticks6502++;
-    /*clockgoal6502 = clockticks6502; irrelevant.*/ 
+    /*clockgoal6502 = clockticks6502; irrelevant.*/
 
     instructions++;
 
@@ -1202,7 +1203,7 @@ void hookexternal(void *funcptr) {
 /*
 	Check all changes against
 	http://6502.org/tutorials/65c02opcodes.html
-	and 
+	and
 	https://github.com/commanderx16/x16-emulator
 
 	The commander X16 emulator has bugs, but it seems to be reasonably solid.
