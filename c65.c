@@ -154,8 +154,8 @@ int main(int argc, char *argv[]) {
             "-a <addr>  : Address to load (default top of address space)\n"
             "-g <addr>  : Set reset vector @ 0xfffc to <address>\n"
             "-t <ticks> : Run for max ticks (default forever)\n"
-            "-m <addr>  : Set magic IO base address (default 0xf000)"
-            "-b <file>  : binary block file backing blk device");
+            "-m <addr>  : Set magic IO base address (default 0xf000)\n"
+            "-b <file>  : binary block file backing blk device\b");
     exit(2);
   }
 
