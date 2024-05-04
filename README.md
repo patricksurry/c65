@@ -59,7 +59,6 @@ value is returned. Four actions are currently supported:
 - status (0): check blkio status returning 0x0 if enabled, 0xff otherwise
 - read (1): read the 1024 byte block @ blknum to bufptr
 - write (2): write the 1024 byte block @ blknum from bufptr
-- exit ($ff): shutdown the simulator and dump profiling data
 
 Note that an external blockfile must be specified with the `-b ...` option
 to enable block IO. The file is simply a binary file with block k
@@ -91,7 +90,7 @@ the end of `forth_code/user_words.fs`:
 
 ## Profiling
 
-After exiting via the blockio hook, the simulator dumps
+After exiting, the simulator dumps
 two files called `c65-coverage.dat` and `c65-writes.dat`.
 Each contains a binary dump of 64K `int`s, which respectively
 count the number of accesses (read or write) to each memory

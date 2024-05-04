@@ -52,23 +52,6 @@
  * engine in C. It was written as part of a Nintendo *
  * Entertainment System emulator I've been writing.  *
  *                                                   *
- * A couple important things to know about are two   *
- * defines in the code. One is "UNDOCUMENTED" which, *
- * when defined, allows Fake6502 to compile with     *
- * full support for the more predictable             *
- * undocumented instructions of the 6502. If it is   *
- * undefined, undocumented opcodes just act as NOPs. *
- *                                                   *
- * The other define is "NES_CPU", which causes the   *
- * code to compile without support for binary-coded  *
- * decimal (BCD) support for the ADC and SBC         *
- * opcodes. The Ricoh 2A03 CPU in the NES does not   *
- * support BCD, but is otherwise identical to the    *
- * standard MOS 6502. (Note that this define is      *
- * enabled in this file if you haven't changed it    *
- * yourself. If you're not emulating a NES, you      *
- * should comment it out.)                           *
- *                                                   *
  * If you do discover an error in timing accuracy,   *
  * or operation in general please e-mail me at the   *
  * address above so that I can fix it. Thank you!    *
@@ -165,19 +148,6 @@ typedef unsigned int uint32;
 #endif
 
 #endif
-/*
-	when this is defined, undocumented opcodes are handled.
-	otherwise, they're simply treated as NOPs.
-*/
-#define UNDOCUMENTED
-
-/*
-* #define NES_CPU
-* when this is defined, the binary-coded decimal (BCD)
-* status flag is not honored by ADC and SBC. the 2A03
-* CPU in the Nintendo Entertainment System does not
-* support BCD operation.
-*/
 
 
 #define FLAG_CARRY     0x01
@@ -1037,17 +1007,6 @@ static void rmb5() { putvalue(getvalue() & ~0x20); }
 static void rmb6() { putvalue(getvalue() & ~0x40); }
 static void rmb7() { putvalue(getvalue() & ~0x80); }
 
-/*undocumented instructions~~~~~~~~~~~~~~~~~~~~~~~~~*/
-/*
-	#define lax nop
-	#define sax nop
-	#define dcp nop
-	#define isb nop
-	#define slo nop
-	#define rla nop
-	#define sre nop
-	#define rra nop
-*/
 
 static void (*addrtable[256])() = {
 /*        |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |     */

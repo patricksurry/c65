@@ -68,7 +68,6 @@ void write6502(uint16_t addr, uint8_t val) {
     _putc(val);
   } else if (addr == blkio_addr) {
     blkiop->status = 0xff;
-    shutdown = val == 0xff;
     if (fblk) {
       if (val < 3) {
         blkiop->status = 0;
@@ -104,10 +103,13 @@ int main(int argc, char *argv[]) {
   FILE *fin, *fout;
   const char *romfile = NULL, *blkfile = NULL;
   int addr = -1, reset = -1, max_ticks = -1, errflg = 0, sz = 0, c;
-  int io = 0xf000;
+  int io = 0xf000, brk_exit = 1;
 
-  while ((c = getopt(argc, argv, ":r:a:g:t:m:b:")) != -1) {
+  while ((c = getopt(argc, argv, "xr:a:g:t:m:b:")) != -1) {
     switch (c) {
+    case 'x':
+      brk_exit = 0;
+      break;
     case 'r':
       romfile = optarg;
       break;
@@ -155,7 +157,8 @@ int main(int argc, char *argv[]) {
             "-g <addr>  : Set reset vector @ 0xfffc to <address>\n"
             "-t <ticks> : Run for max ticks (default forever)\n"
             "-m <addr>  : Set magic IO base address (default 0xf000)\n"
-            "-b <file>  : binary block file backing blk device\b");
+            "-b <file>  : binary block file backing blk device\n"
+            "-x         : reset via 0xfffe on BRK rather than exit\n");
     exit(2);
   }
 
@@ -192,8 +195,10 @@ int main(int argc, char *argv[]) {
   show_cpu();
 
   set_terminal_nb();
-  while (ticks != max_ticks && !shutdown)
+  while (ticks != max_ticks && !shutdown) {
     ticks += step6502();
+    if (!opcode && brk_exit) shutdown = 1;
+  }
 
   show_cpu();
 
