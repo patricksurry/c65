@@ -1,4 +1,18 @@
+// PROGRAMMERS : Patrick Surry and Sam Colwell
+// FILE        : io.c
+// DATE        : 2024-05
+// DESCRIPTION : This abstracts the I/O and allows supporting multiple
+// environments (Linux, OSX, WSL, Native Windows) that all have gcc.
+#ifdef WINDOWS_NATIVE
+#include <stdio.h>
+#include <conio.h> // Windows specific
 
+void set_terminal_nb() {} // No-op
+//int _kbhit(); // _kbhit already available in conio.h
+int _getc() { return getch(); } // getch() from conio.h has no echo.
+void _putc(char ch) { putchar(ch); fflush(stdout); return; }
+#else
+// These should work on Linux, OSX, and WSL.
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,3 +75,4 @@ int _getc() {
 }
 
 void _putc(char ch) { putchar((int)ch); }
+#endif
