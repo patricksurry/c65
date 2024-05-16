@@ -1,10 +1,12 @@
-#include "fake65c02.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <ctype.h>
 
+#include "fake65c02.h"
+#include "linenoise.h"
 
 #define BREAK_ALWAYS 1
 #define BREAK_ONCE  2
@@ -16,6 +18,20 @@ uint8_t breakpoints[65536];
 
 uint8_t read6502(uint16_t addr) { return 0; }
 void write6502(uint16_t addr, uint8_t val) {}
+
+const char *prompt_fmt = "A:\x1b[m\x1b[1m%.2x\x1b[m X:\x1b[m\x1b[1m%.2x\x1b[m Y:\x1b[m\x1b[1m%.2x\x1b[m S:\x1b[m\x1b[1m%.2x\x1b[m  \x1b[%cmN\x1b[m\x1b[%cmV\x1b[m\x1b[2m-\x1b[m\x1b[%cmB\x1b[m\x1b[%cmD\x1b[m\x1b[%cmI\x1b[m\x1b[%cmZ\x1b[m\x1b[%cmC\x1b[m  \x1b[1m%.4x\x1b[m > ";
+char _prompt[512];
+char* prompt() {
+    sprintf(_prompt, prompt_fmt,
+        a, x, y, sp,
+        status & FLAG_SIGN ? '1' : '2', status & FLAG_OVERFLOW ? '1' : '2',
+        status & FLAG_BREAK ? '1' : '2',
+        status & FLAG_DECIMAL ? '1' : '2', status & FLAG_INTERRUPT ? '1' : '2',
+        status & FLAG_ZERO ? '1' : '2', status & FLAG_CARRY ? '1' : '2',
+        pc
+    );
+    return _prompt;
+}
 
 
 void dump(uint16_t start, uint16_t end) {
@@ -47,7 +63,7 @@ void dump(uint16_t start, uint16_t end) {
             *p = ' ';
             nibble = addr & 0xf;
             if (nibble == 8) p++;
-        } while(nibble);
+        } while(nibble && addr < end);
 
         printf("%s\n", line);
     }
@@ -154,16 +170,154 @@ void disasm(uint16_t start, uint16_t end) {
     }
 }
 
+void completion(const char *buf, linenoiseCompletions *lc) {
+    if (buf[0] == 'h') {
+        linenoiseAddCompletion(lc,"hello");
+        linenoiseAddCompletion(lc,"hello there");
+    }
+}
+
+typedef struct Command {
+    const char * name;
+    const char * help;
+    void (*handler)();
+} Command;
+
+
+void parse_range(uint16_t* start, uint16_t* end, uint16_t default_length) {
+    /* /35 1234/35 or 1234-5678 or 1234 */
+    char *p, *q;
+    uint16_t v;
+
+    p = strtok(NULL, " ");
+    v = strtol(p, &q, 16);
+    *start = q==p ? pc : v;
+    switch (*q) {
+        case '/':
+            v = strtol(q+1, NULL, 16);
+            *end = *start + (v ? v : default_length);
+            break;
+        case ':':
+            v = strtol(q+1, NULL, 16);
+            *end = v ? v : (*start + default_length);
+            break;
+        default:
+            *end = *start + default_length;
+    }
+}
+
+void cmd_disasm() {
+    uint16_t start, end;
+    parse_range(&start, &end, 16);
+    disasm(start, end);
+}
+
+void cmd_dump() {
+    uint16_t start, end;
+    parse_range(&start, &end, 64);
+    dump(start, end);
+}
+
+void cmd_quit() {
+    exit(0);
+}
+
+void cmd_set() {
+    char *vars = "axysnv bdizc";
+    uint8_t* regs[] = {&a, &x, &y, &sp}, i, v, bit;
+    char *p, *q;
+    p = strtok(NULL, " ");
+    q = strchr(vars, tolower(*p));
+    if (!q) {
+        puts("Unknown register/flag, expected [a|x|y|s|n|v|d|i|z|c]\n");
+        return;
+    }
+    i = q-vars;
+    p = strtok(NULL, " ");
+    if (!p) {
+        puts("Missing value in set\n");
+        return;
+    }
+    v = strtol(p, NULL, 16);
+
+    if (i < 4) {
+        *(regs[i]) = v;
+    } else {
+        bit = 1 << (11-i);
+        if (v) {
+            status |= bit;
+        } else {
+            status &= 255 - bit;
+        }
+    }
+}
+
+Command _cmds[] = {
+    {
+        "disassemble",
+        "[range]",
+        cmd_disasm,
+    },
+    {
+        "read",
+        "[range]",
+        cmd_dump,
+    },
+    {
+        "set",
+        "[a|x|y|s|n|v|d|i|z|c] value",
+        cmd_set,
+    },
+    {
+        "quit",
+        "leave c65",
+        cmd_quit,
+    }
+};
+
+    /*
+break 1234 orwx
+label
+go [1234]
+continue
+step
+next
+quit
+help
+read
+write
+set [axys nvbdizc]
+    */
+
+void command(char *line) {
+    char* p = strtok(line, " ");
+    int i;
+
+    for(i=0; i<sizeof(_cmds)/sizeof(_cmds[0]); i++) {
+        if(!strncmp(p, _cmds[i].name, strlen(p))) {
+            _cmds[i].handler();
+            break;
+        }
+    }
+}
 
 int main(void) {
     FILE *fin;
+    char *line;
 
     fin = fopen("bboard.rom", "rb");
     fread(memory+32768, 1, 32768, fin);
     fclose(fin);
 
-    dump(32768, 32768+512);
     pc = 0x8011;
+    status = 134;
+
     breakpoints[0x800b] = BREAK_ONCE | BREAK_WRITE;
-    disasm(32768, 32768+64);
+
+    linenoiseSetCompletionCallback(completion);
+
+    while((line = linenoise(prompt())) != NULL) {
+        command(line);
+        linenoiseFree(line); /* Or just free(line) if you use libc malloc. */
+    }
 }
