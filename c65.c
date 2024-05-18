@@ -1,6 +1,3 @@
-#include "fake65c02.h"
-#include "io.h"
-
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -8,90 +5,131 @@
 #include <string.h>
 #include <unistd.h>
 
+
+#define FAKE6502_NOT_STATIC 1
+#include "fake65c02.h"
+#include "c65.h"
+#include "magicio.h"
+#include "monitor.h"
+
+
 uint8_t memory[65536];
+uint8_t breakpoints[65536];
 int rws[65536];
 int writes[65536];
 
-int getc_addr, peekc_addr, putc_addr, blkio_addr, timer_addr;
-int ticks = 0, mark = 0, shutdown = 0;
+long ticks = 0;
+int break_flag = 0;
 
-/*
-blkio supports the following action values.  write the action value
-after setting other parameters to initiate the action.  All actions
-return 0x0 on success and nonzero (typically 0xff) otherwise.
-A portable check for blkio is to write 0x1 to status, then write 0x0 to action
-and check if status is now 0.
-    0 - status: detect if blkio available, 0x0 if enabled, 0xff otherwise
-    1 - read: read the 1024 byte block @ blknum to bufptr
-    2 - write: write the 1024 byte block @ blknum from bufptr
-    ff - exit: clean exit from the simulator, dumping profling data
-*/
-typedef struct BLKIO {
-  uint8_t action;  // I: request an action (write after setting other params)
-  uint8_t status;  // O: action status
-  uint16_t blknum; // I: block to read or write
-  uint16_t bufptr; // I/O: low-endian pointer to 1024 byte buffer to read/write
-} BLKIO;
 
-BLKIO *blkiop;
-FILE *fblk = NULL;
+static uint8_t _opmodes[256] = { 255 };
+
+static void (*_addrmodes[])() = {
+    /* 0-1: 0 bytes */
+    imp, acc,
+    /* 2-9: 1 byte */
+    imm, zp, zpx, zpy,
+    ind0, indx, indy, rel,      /* mode 9 and 10 include a relative address byte */
+    /* 10+: 2 bytes */
+    zprel, abso, absx, absy, ind, ainx
+};
+
+#define n_addrmodes sizeof(_addrmodes)/sizeof(_addrmodes[0])
+
+static const char* _opfmts[] = {
+    "", "a",
+    "#$%x", "$%.2x", "$%.2x,x", "$%.2x,y",
+    "($%.2x)", "($%.2x,x)",  "($%.2x),y", "$%.4x ; %+d",
+    "$%.2x,$%.4x ; %+d", "$%.4x", "$%.4x,x", "$%.4x,y", "($%.4x)", "($%.4x,x)"
+};
+
+
+const char* opname(uint8_t op) {
+    return opnames + op*4;
+}
+
+
+uint8_t opmode(uint8_t op) {
+    int i, k;
+    if (_opmodes[0] == 255) {
+        /* initialize _opmodes from addrtable */
+        for(i=0; i<256; i++) {
+            for (k=0; k<n_addrmodes && _addrmodes[k] != addrtable[i]; k++) /**/ ;
+            _opmodes[i] = k;
+        }
+    }
+    return _opmodes[op];
+}
+
+uint8_t oplen(uint8_t op) {
+    uint8_t k = opmode(op);
+    return k < 2 ? 1 : ( k < 10 ? 2: 3);
+}
+
+
+const char* opfmt(uint8_t op) {
+    return _opfmts[opmode(op)];
+}
+
 
 uint8_t read6502(uint16_t addr) {
-  char buf[1];
-  int ch, delta;
-  if (addr == getc_addr) {
-    while (!_kbhit()) {
-    }
-    ch = _getc();
-    shutdown = (ch == EOF);
-    memory[addr] = (uint8_t)ch;
-  } else if (addr == peekc_addr) {
-    ch = _kbhit() ? (_getc() | 0x80) : 0;
-    memory[addr] = (uint8_t)ch;
-  } else if (addr == timer_addr /* start timer */) {
-    mark = ticks;
-  } else if (addr == timer_addr + 1 /* stop timer */) {
-    delta = ticks - mark;
-    memory[timer_addr + 2] = (uint8_t)((delta >> 16) & 0xff);
-    memory[timer_addr + 3] = (uint8_t)((delta >> 24) & 0xff);
-    memory[timer_addr + 4] = (uint8_t)((delta >> 0) & 0xff);
-    memory[timer_addr + 5] = (uint8_t)((delta >> 8) & 0xff);
-  }
+  io_magic_read(addr);
   rws[addr] += 1;
+  break_flag |= (breakpoints[addr] & BREAK_READ);
   return memory[addr];
 }
 
+
 void write6502(uint16_t addr, uint8_t val) {
-  char *line;
-  int n;
-  if (addr == putc_addr) {
-    _putc(val);
-  } else if (addr == blkio_addr) {
-    blkiop->status = 0xff;
-    if (fblk) {
-      if (val < 3) {
-        blkiop->status = 0;
-        if (val == 1 || val == 2) {
-          fseek(fblk, 1024 * blkiop->blknum, SEEK_SET);
-          if (val == 1) {
-            fread(memory + blkiop->bufptr, 1024, 1, fblk);
-          } else {
-            fwrite(memory + blkiop->bufptr, 1024, 1, fblk);
-            fflush(fblk);
-          }
-        }
-      }
-    }
-  }
+  io_magic_write(addr, val);
   rws[addr] += 1;
   writes[addr] += 1;
+  break_flag |= breakpoints[addr] & BREAK_WRITE;
   memory[addr] = val;
+}
+
+
+int load_memory(const char* romfile, int addr) {
+  /*
+    read ROM @ addr, return 0 on success
+    if addr < 0, align to top of memory
+    */
+  FILE *fin;
+  int sz;
+
+  fin = fopen(romfile, "rb");
+  if (!fin) {
+    fprintf(stderr, "File not found: %s\n", romfile);
+    return -1;
+  }
+  fseek(fin, 0L, SEEK_END);
+  sz = ftell(fin);
+  rewind(fin);
+  if (addr < 0)
+    addr = 65536 - sz;
+  printf("Reading %s to $%04x:$%04x\n", romfile, addr, addr+sz-1);
+  fread(memory + addr, 1, sz, fin);
+  fclose(fin);
+  return 0;
+}
+
+int save_memory(const char* romfile, uint16_t start, uint16_t end) {
+  FILE *fout;
+  fout = fopen(romfile, "wb");
+  if (!fout) {
+    fprintf(stderr, "File not found: %s\n", romfile);
+    return -1;
+  }
+  printf("Writing $%04x:$%04x to %s", start, end, romfile);
+  fwrite(memory+start, 1, end-start+1, fout);
+  fclose(fout);
+  return 0;
 }
 
 void show_cpu() {
   printf(
       "c65: PC=%04x A=%02x X=%02x Y=%02x S=%02x FLAGS=<N%d V%d B%d D%d I%d Z%d "
-      "C%d> ticks=%u\n",
+      "C%d> ticks=%lu\n",
       pc, a, x, y, sp, status & FLAG_SIGN ? 1 : 0,
       status & FLAG_OVERFLOW ? 1 : 0, status & FLAG_BREAK ? 1 : 0,
       status & FLAG_DECIMAL ? 1 : 0, status & FLAG_INTERRUPT ? 1 : 0,
@@ -99,16 +137,17 @@ void show_cpu() {
 }
 
 int main(int argc, char *argv[]) {
+  const char *romfile = NULL;
+  int addr = -1, start = -1, debug = 0, errflg = 0, c;
+  int brk_action = BREAK_SHUTDOWN;
 
-  FILE *fin, *fout;
-  const char *romfile = NULL, *blkfile = NULL;
-  int addr = -1, reset = -1, max_ticks = -1, errflg = 0, sz = 0, c;
-  int io = 0xf000, brk_exit = 1;
-
-  while ((c = getopt(argc, argv, "xr:a:g:t:m:b:")) != -1) {
+  while ((c = getopt(argc, argv, "xgr:a:s:m:b:")) != -1) {
     switch (c) {
     case 'x':
-      brk_exit = 0;
+      brk_action = 0;
+      break;
+    case 'g':
+      debug = 1;
       break;
     case 'r':
       romfile = optarg;
@@ -116,19 +155,16 @@ int main(int argc, char *argv[]) {
     case 'a':
       addr = strtol(optarg, NULL, 0);
       break;
-    case 'g':
-      reset = strtol(optarg, NULL, 0);
-      break;
-    case 't':
-      max_ticks = strtol(optarg, NULL, 0);
+    case 's':
+      start = strtol(optarg, NULL, 0);
       break;
     case 'm':
-      io = strtol(optarg, NULL, 0);
+      io_addr = strtol(optarg, NULL, 0);
       break;
     case 'b':
-      blkfile = optarg;
+      io_blkfile(optarg);
       break;
-    case ':': /* -f or -o without operand */
+    case ':': /* option without operand */
       fprintf(stderr, "Option -%c requires an argument\n", optopt);
       errflg++;
       break;
@@ -138,12 +174,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  putc_addr = io + 1;
-  getc_addr = io + 4;
-  peekc_addr = io + 5;
-  timer_addr = io + 6;
-  blkio_addr = io + 16;
-
   if (romfile == NULL)
     errflg++;
 
@@ -152,64 +182,42 @@ int main(int argc, char *argv[]) {
             "Usage: c65 -r file.rom [...]\n"
             "Options:\n"
             "-?         : Show this message\n"
-            "-r <file>  : Load file to memory and reset into it\n"
-            "-a <addr>  : Address to load (default top of address space)\n"
-            "-g <addr>  : Set reset vector @ 0xfffc to <address>\n"
-            "-t <ticks> : Run for max ticks (default forever)\n"
+            "-r <file>  : Load file and reset into it via address at fffc\n"
+            "-a <addr>  : Load at address instead of aligning to end of memory\n"
+            "-s <addr>  : Start executing at addr instead of via reset vector\n"
             "-m <addr>  : Set magic IO base address (default 0xf000)\n"
-            "-b <file>  : binary block file backing blk device\n"
-            "-x         : reset via 0xfffe on BRK rather than exit\n");
+            "-b <file>  : Use binary file for magic block storage\n"
+            "-x         : BRK should reset via $fffe rather than exit\n"
+            "-g         : Run with interactive debugger\n"
+            "Note: write hex address arguments like 0x1234\n");
     exit(2);
   }
 
-  /* non-blocking stdin */
-  //    fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK);
+  if (load_memory(romfile, addr) != 0) exit(3);
 
-  blkiop = (BLKIO *)(memory + blkio_addr);
-
-  if (blkfile)
-    fblk = fopen(blkfile, "r+b");
-
-  fin = fopen(romfile, "rb");
-  if (!fin) {
-    fprintf(stderr, "File not found: %s\n", romfile);
-    exit(3);
-  }
-  fseek(fin, 0L, SEEK_END);
-  sz = ftell(fin);
-  rewind(fin);
-  if (addr < 0)
-    addr = 65536 - sz;
-  printf("c65: reading %s @ 0x%04x\n", romfile, addr);
-  fread(memory + addr, 1, sz, fin);
-  fclose(fin);
-
-  if (reset >= 0) {
-    memory[0xfffc] = reset & 0xff;
-    memory[0xfffd] = (reset >> 8) & 0xff;
-  }
+  io_init(debug);
+  if (debug) monitor_init();
 
   printf("c65: starting\n");
   show_cpu();
   reset6502();
   show_cpu();
 
-  set_terminal_nb();
-  while (ticks != max_ticks && !shutdown) {
-    ticks += step6502();
-    if (!opcode && brk_exit) shutdown = 1;
+  if (start >= 0)
+    pc = (uint16_t)start;
+
+  int steps;
+  while (!(break_flag & BREAK_SHUTDOWN)) {
+    steps = debug ? monitor_command() : -1;
+    break_flag = 0;
+    while (steps && !break_flag) {
+      ticks += step6502();
+      break_flag |= breakpoints[pc] & BREAK_EXECUTE;
+      if (opcode == 0) break_flag |= BREAK_ONCE | brk_action;
+      if (steps > 0) steps--;
+    }
   }
-
   show_cpu();
-
-  if (fblk)
-    fclose(fblk);
-
-  fout = fopen("c65-coverage.dat", "wb");
-  fwrite(rws, sizeof(int), 65536, fout);
-  fclose(fout);
-
-  fout = fopen("c65-writes.dat", "wb");
-  fwrite(writes, sizeof(int), 65536, fout);
-  fclose(fout);
+  io_exit();
+  if (debug) monitor_exit();
 }
