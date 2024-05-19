@@ -27,6 +27,10 @@ typedef struct Command {
     void (*handler)();
 } Command;
 
+#define E_OK 0
+#define E_MISSING 1
+#define E_PARSE 2
+
 Label *labels = NULL;
 Command _cmds[];
 int org = -1;       /* the current address, reset to PC after each simulation step */
@@ -100,53 +104,95 @@ const char* label_for_address(uint16_t addr) {
 int address_for_label(const char* s) {
     Label *l;
 
-    if (strcasecmp(s, "pc")) return pc;
+    if (0 == strcasecmp(s, "pc")) return pc;
     for (l=labels; l && strcmp(s, l->label) != 0; l=l->next) /**/ ;
     return l ? l->addr : -1;
 }
 
-/*TODO flip 0/1 for parse_xxx return with err type? */
-int parse_addr(uint16_t *addr) { //}, int default) {  /*TODO -1 no default */
-    /* parse address, empty defaults to PC. return 1 on success, 0 on failure */
-    /*TODO explicit default */
-    /*TODO check labels */
-    char *p, *q;
+int _parse_addr(char *p, uint16_t *addr, int dflt) {
+    /* parse address, with default if >= 0 */
+    /* return 0 on success else error code */
+
+    char *q;
     int v;
-    p = strtok(NULL, " ");
+
     if (!p) {
-        *addr = pc;
-        return 1;
+        if (dflt < 0) {
+            puts("Missing address");
+            return E_MISSING;
+        }
+        *addr = (uint16_t)dflt;
+    } else {
+        v = address_for_label(p);
+        if (v < 0) {
+            v = strtol(p, &q, 16);
+            if (q==p) {
+                printf("Couldn't parse address '%s'\n", p);
+                return E_PARSE;
+            }
+        }
+        *addr = (uint16_t)v;
     }
-    v = strtol(p, &q, 16);
-    if (q!=p) *addr = (uint16_t)v;
-    return q==p ? 0: 1;
+    return E_OK;
 }
 
+int parse_addr(uint16_t *addr, int dflt) {
+    char *p = strtok(NULL, " ");
+    return _parse_addr(p, addr, dflt);
+}
 
-int parse_range(uint16_t* start, uint16_t* end, uint16_t default_start, uint16_t default_length) {
-    /*TODO return 0 on error, 1 on success */
-    /*TODO check labels */
-    /* /35 1234/35 or 1234-5678 or 1234 */
-    char *p, *q;
-    uint16_t v;
+int parse_range(uint16_t* start, uint16_t* end, int dflt_start, int dflt_length) {
+    /* parse a range witten as a single string start:end or start/offset  */
+    char *p, *q, sep;
+    uint16_t dflt_end;
+    int v;
 
     p = strtok(NULL, " ");
-    q = p;
-    v = p ? strtol(p, &q, 16): 0;
-    *start = q==p ? default_start : v;
-    switch (q?*q:0) {
-        case '/':
-            v = strtol(q+1, NULL, 16);
-            *end = *start + (v ? v : default_length);
-            break;
-        case ':':
-            v = strtol(q+1, NULL, 16);
-            *end = v ? v : (*start + default_length);
-            break;
-        default:
-            *end = *start + default_length;
+    if (!p) {
+        if (dflt_start < 0 || dflt_length < 0) {
+            puts("Missing range");
+            return E_MISSING;
+        }
+        *start = (uint16_t)dflt_start;
+        *end = (uint16_t)(dflt_start + dflt_length);
+    } else {
+        q = strpbrk(p, "/:");
+        sep = q ? *q: 0;
+        if (p == q) {
+            if (dflt_start < 0) {
+                puts("Missing start for range");
+                return E_MISSING;
+            }
+            *start = (uint16_t)dflt_start;
+        } else {
+            if (q) *q = 0;   // terminate p so we can parse addr
+            v = _parse_addr(p, start, dflt_start);
+            if (v!=0) return v;
+        }
+        dflt_end = *start + (uint16_t)dflt_length;
+        switch (sep) {
+            case ':':
+                v =  _parse_addr(++q, end, dflt_length < 0 ? -1 : dflt_end);
+                if (v!=0) return v;
+                break;
+            case '/':
+                v = strtol(++q, &p, 16);
+                if (p == q) {
+                    printf("Couldn't parse offset '%s'\n", q);
+                    return E_PARSE;
+                }
+                *end = *start + v;
+                break;
+            default:
+                /* only start address was given */
+                if (dflt_length < 0) {
+                    puts("Missing :end or /offset for range");
+                    return E_MISSING;
+                }
+                *end = dflt_end;
+        }
     }
-    return 1;
+    return E_OK;
 }
 
 char* _fmt_addr(char *buf, uint16_t addr, int len) {
@@ -266,45 +312,55 @@ void dump(uint16_t start, uint16_t end) {
 
 
 void cmd_go() {
-    /* if address ok, run indefinitely */
-    /* TODO optional break addr */
-    if(!parse_addr(&pc)) {
-        puts("Couldn't parse address");
-        return;
+    /* run indefinitely from optional addr or PC*/
+    if(0 == parse_addr(&pc, pc)) {
+        step_mode = STEP_RUN;
+        step_target = -1;
     }
-    step_mode = STEP_RUN;
-    step_target = -1;
-
 }
 
 
 void cmd_continue() {
-    /* run imdefinitely */
-    /*TODO optional break addr */
-    step_mode = STEP_RUN;
-    step_target = -1;
+    /* run imdefinitely, optionally to one-time breakpoint */
+    uint16_t addr;
+    if(0 == parse_addr(&addr, pc)) {
+        if (addr != pc) memory[addr] |= BREAK_ONCE;
+        step_mode = STEP_RUN;
+        step_target = -1;
+    }
+}
+
+void _cmd_single(int mode) {
+    char *p = strtok(NULL, " "), *q;
+    int v;
+    disasm(pc, pc+1);
+    step_mode = mode;
+    step_target = 1;
+    if (p) {
+        v = strtol(p, &q, 16);
+        if (q != p) step_target = v;
+    }
+    if (step_target > 1) puts("...");
 }
 
 void cmd_step() {
     /* show current line and run one step */
-    /*TODO optional step count */
-    disasm(pc, pc+1);
-    step_mode = STEP_INST;
-    step_target = 1;
+    _cmd_single(STEP_INST);
 }
 
 void cmd_next() {
-    /*TODO optional step count*/
-    disasm(pc, pc+1);
-    step_mode = STEP_JSR;
-    step_target = 1;
+    /* like step, but treat jsr ... rts as one step */
+    _cmd_single(STEP_JSR);
 }
 
 void cmd_call() {
-    uint16_t ret = pc;
-    if (!parse_addr(&pc)) {
-        printf("Couldn't parse address");
-    }
+    uint16_t ret = pc, target;
+
+    if (0 != parse_addr(&target, -1))
+        return;
+
+    /* trigger break once we return from subroutine */
+    pc = target;
     breakpoints[ret] |= BREAK_ONCE;
     ret--;  // 6502 rts is weird...
 
@@ -321,22 +377,18 @@ void cmd_call() {
 void cmd_disasm() {
     uint16_t start, end;
 
-    if(!parse_range(&start, &end, org, 16)) {
-        puts("Bad address range\n");
-    } else {
-        org = disasm(start, end);
-    }
+    if (0 != parse_range(&start, &end, org, 16)) return;
+
+    org = disasm(start, end);
 }
 
 
 void cmd_dump() {
     uint16_t start, end;
-    if (!parse_range(&start, &end, org, 64)) {
-        puts("Bad address range\n");
-    } else {
-        dump(start, end);
-        org = end;
-    }
+
+    if (0 != parse_range(&start, &end, org, 64)) return;
+    dump(start, end);
+    org = end;
 }
 
 
@@ -350,10 +402,8 @@ void cmd_break() {
     uint8_t f=0;
     char *p;
 
-    if (!parse_range(&start, &end, pc, 1)) {
-        puts("Bad address range\n");
-        return;
-    }
+    if (0 != parse_range(&start, &end, pc, 1)) return;
+
     p = strtok(NULL, " ");
     switch(p?tolower(*p):'x') {
         case 'r':
@@ -367,6 +417,9 @@ void cmd_break() {
             break;
         case 'x':
             f = BREAK_ALWAYS;
+            break;
+        case '1':
+            f = BREAK_ONCE;
             break;
     }
     if (f) {
@@ -382,13 +435,11 @@ void cmd_break() {
 void cmd_delete() {
     uint16_t start, end;
 
-    if (!parse_range(&start, &end, pc, 1)) {
-        puts("Bad address range\n");
-    } else {
-        for(/**/; start < end; start++)
-            breakpoints[start] = 0;
-        org = start;
-    }
+    if (0 != parse_range(&start, &end, pc, 1)) return;
+
+    for(/**/; start < end; start++)
+        breakpoints[start] = 0;
+    org = start;
 }
 
 
@@ -432,10 +483,9 @@ void cmd_store() {
     uint16_t start, end, addr;
     uint8_t val;
     char *p, *q;
-    if (!parse_range(&start, &end, pc, 1)) {
-        puts("Bad address range\n");
-        return;
-    }
+
+    if (0 != parse_range(&start, &end, pc, 1)) return;
+
     addr = start;
     org = start;
     while((p = strtok(NULL, " "))) {
@@ -461,25 +511,25 @@ void cmd_label() {
     if (
         !lbl
         || isdigit(lbl[0])
-        || strspn(lbl, "_@0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") != strlen(lbl)
+        || strlen(lbl) != strspn(lbl, "_@0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
     ) {
         puts("Invalid label\n");
         return;
     }
-    if (!parse_addr(&addr)) {
-        puts("Invalid address\n");
-        return;
-    }
-    add_label(lbl, addr);
+    if (0 == parse_addr(&addr, pc))
+        add_label(lbl, addr);
 }
 
 void cmd_unlabel() {
-    /*TODO*/
+    uint16_t addr;
+    if (0 == parse_addr(&addr, -1))
+        del_label(addr);
 }
 
 void cmd_blockfile() {
     const char* p = strtok(NULL, " ");
-    io_blkfile(p);
+    if(!p) puts("Please provide filename\n");
+    else io_blkfile(p);
 }
 
 void cmd_load() {
@@ -490,12 +540,10 @@ void cmd_load() {
         puts("Missing file name\n");
         return;
     }
-    if(!parse_addr(&addr)) {
-        puts("Bad or missing address\n");
-        return;
+    if (0 == parse_addr(&addr, -1)) {
+        (void)load_memory(fname, addr);
+        org = addr;
     }
-    (void)load_memory(fname, addr);
-    org = addr;
 }
 
 void cmd_save() {
@@ -506,10 +554,8 @@ void cmd_save() {
         puts("Missing file name\n");
         return;
     }
-    if (!parse_range(&start, &end, 0, 0)) {
-        puts("Bad address range\n");
-        return;
-    }
+    if (0 != parse_range(&start, &end, 0, 0)) return;
+
     if (start == end) end = 0xffff;
     (void)save_memory(fname, start, end);
     org = start;
@@ -524,17 +570,25 @@ void cmd_quit() {
 
 void cmd_help() {
     int i;
-    for (i=0; strcmp(_cmds[i].name, "?"); i++) {
+    for (i=0; /**/; i++) {
         printf("%s %s\n", _cmds[i].name, _cmds[i].help);
+        if (0 == strcmp(_cmds[i].name, "?")) break;
     }
+    printf(
+        "\n"
+        "Commands can be shortened to their first few characters, searched in the order above.\n"
+        "For example 'd' becomes 'disassemble' not 'dump'.  Tab completion is also available\n"
+        "along with command history using the up and down arrows.\n"
+        "Commands like step, next, diasm or dump can be repeated by simply hitting enter.\n"
+        "The monitor maintains a current address so repeated dump will carry on through memory.\n"
+        "Write all addresses and values in hex with no prefix, e.g. 123f.\n"
+        "Ranges are written as start:end or start/offset with no spaces, e.g. 1234:1268, 1234/10, /20.\n"
+        "Labels can be substituted interchangeably for addreses, including the special 'pc'.\n"
+    );
 }
 
 /*
 TODO
-
-step / next should take optional step, print ... after first line if # > 1
-
-label / unlabel or just clear?
 
 stats dump command
 
@@ -556,28 +610,28 @@ tick limit command
 */
 
 Command _cmds[] = {
-    { "go", "[addr] - run from address until breakpoint", 0, cmd_go },
-    { "continue", "- run until breakpoint", 0, cmd_continue },
+    { "go", "[addr] - run from pc (or optional addr) until breakpoint", 0, cmd_go },
+    { "continue [addr]", "- run from pc until breakpoint (or optional addr)", 0, cmd_continue },
     { "step", "- [count] step by single instructions", 1, cmd_step },
     { "next", "- [count] like step but treats jsr ... rts as one step", 1, cmd_next },
-    { "call", "[addr] - call subroutine leaving PC unchanged", 0, cmd_call },
+    { "call", "addr - call subroutine leaving PC unchanged", 0, cmd_call },
 
-    { "disassemble", "[range] - show code disassembly for range", 1, cmd_disasm },
-    { "dump", "[range] - show memory contents for range", 1, cmd_dump },
-    { "stack", "- show stack contents", 0, cmd_stack },
+    { "disassemble", "[range] - show code disassembly for range (or current)", 1, cmd_disasm },
+    { "dump", "[range] - show memory contents for range (or current)", 1, cmd_dump },
+    { "stack", "- show stack contents, sp+1 through $1ff", 0, cmd_stack },
     { "break",  "[range] r|w|a|x - trigger break on read, write, any access or execute (default)", 0, cmd_break },
-    { "delete",  "[range] - remove all breakpoints in range", 0, cmd_delete },
-    { "set", "[a|x|y|sp|pc|n|v|d|i|z|c] value - modify a register or flag", 0, cmd_set },
-    { "store", "[range] value ... - set memory contents in range to value(s)", 0, cmd_store },
+    { "delete",  "[range] - remove all breakpoints in range (default all)", 0, cmd_delete },
+    { "set", "{a|x|y|sp|pc|n|v|d|i|z|c} value - modify a register or flag", 0, cmd_set },
+    { "store", "range value ... - set memory contents in range to value(s)", 0, cmd_store },
     { "label", "name addr - add a symbolic name for addr", 0, cmd_label },
     { "unlabel", "name|addr - remove label by name or addr", 0, cmd_unlabel },
 
-    { "load", "romfile [range] - read binary file to memory", 0, cmd_load },
-    { "save", "romfile [range] - write memory to file", 0, cmd_save },
+    { "load", "romfile addr - read binary file to memory", 0, cmd_load },
+    { "save", "romfile [range] - write memory to file (default full dump)", 0, cmd_save },
     { "blockfile", "[blockfile] - use binary file for block storage, empty to disable", 0, cmd_blockfile },
     { "quit", "- leave c65", 0, cmd_quit },
     { "help", "or ? - show this help", 0, cmd_help },
-    { "?", "", 0, cmd_help },
+    { "?", "", 0, cmd_help },    // this must be last
 };
 
 #define n_cmds sizeof(_cmds)/sizeof(_cmds[0])
@@ -634,7 +688,6 @@ void monitor_init(const char * labelfile) {
             if (s && end > s+1) {
                 add_label(label, addr);
             } else {
-                puts(p);
                 fail++;
             }
         }
