@@ -19,7 +19,6 @@ typedef struct Label {
     struct Label* next;
 } Label;
 
-
 typedef struct Command {
     const char * name;
     const char * help;
@@ -568,38 +567,17 @@ void cmd_help() {
     }
     printf(
         "\n"
+        "Use ctrl-C to interrupt run or continue, type q or quit to exit.\n"
         "Commands can be shortened to their first few characters, searched in the order above.\n"
         "For example 'd' becomes 'disassemble' not 'dump'.  Tab completion is also available\n"
         "along with command history using the up and down arrows.\n"
         "Commands like step, next, diasm or dump can be repeated by simply hitting enter.\n"
-        "The monitor maintains a current address so repeated dump will carry on through memory.\n"
+        "The monitor maintains a current address so (say) repeating dump will progress through memory.\n"
         "Write all addresses and values in hex with no prefix, e.g. 123f.\n"
         "Ranges are written as start:end or start/offset with no spaces, e.g. 1234:1268, 1234/10, /20.\n"
         "Labels can be substituted interchangeably for addreses, including the special 'pc'.\n"
     );
 }
-
-/*
-TODO
-
-stats dump command
-
-  FILE *fout;
-  fout = fopen("c65-coverage.dat", "wb");
-  fwrite(rws, sizeof(int), 65536, fout);
-  fclose(fout);
-
-  fout = fopen("c65-writes.dat", "wb");
-  fwrite(writes, sizeof(int), 65536, fout);
-  fclose(fout);
-
-tick limit command
-
-  long max_ticks = -1;
-    case 't':
-      max_ticks = strtol(optarg, NULL, 0);
-      break;
-*/
 
 Command _cmds[] = {
     { "go", "[addr] - run from pc (or optional addr) until breakpoint", 0, cmd_go },
