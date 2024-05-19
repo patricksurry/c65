@@ -226,9 +226,7 @@ uint16_t disasm(uint16_t start, uint16_t end) {
         p = line;
         p += sprintf(line, "\x1b[1m%c\x1b[m", pc==addr?'*':' ');
         *p = ' ';
-        if (breakpoints[addr] & BREAK_EXECUTE) {
-            line[8] = 'B';
-        }
+        if (breakpoints[addr] & BREAK_PC) line[8] = 'B';
         p = line+10;
         p += sprintf(p, "%.4x  \x1b[2m", addr);
 
@@ -315,7 +313,6 @@ void cmd_go() {
     /* run indefinitely from optional addr or PC*/
     if(0 == parse_addr(&pc, pc)) {
         step_mode = STEP_RUN;
-        step_target = -1;
     }
 }
 
@@ -324,9 +321,8 @@ void cmd_continue() {
     /* run imdefinitely, optionally to one-time breakpoint */
     uint16_t addr;
     if(0 == parse_addr(&addr, pc)) {
-        if (addr != pc) memory[addr] |= BREAK_ONCE;
+        if (addr != pc) breakpoints[addr] |= BREAK_ONCE;
         step_mode = STEP_RUN;
-        step_target = -1;
     }
 }
 
@@ -350,7 +346,7 @@ void cmd_step() {
 
 void cmd_next() {
     /* like step, but treat jsr ... rts as one step */
-    _cmd_single(STEP_JSR);
+    _cmd_single(STEP_NEXT);
 }
 
 void cmd_call() {
@@ -370,7 +366,6 @@ void cmd_call() {
     sp -= 2;
 
     step_mode = STEP_RUN;
-    step_target = -1;
 }
 
 
@@ -413,13 +408,10 @@ void cmd_break() {
             f = BREAK_WRITE;
             break;
         case 'a':
-            f = BREAK_ACCESS;
+            f = BREAK_READ | BREAK_WRITE;
             break;
         case 'x':
-            f = BREAK_ALWAYS;
-            break;
-        case '1':
-            f = BREAK_ONCE;
+            f = BREAK_PC;
             break;
     }
     if (f) {
@@ -665,10 +657,9 @@ void completion(const char *buf, linenoiseCompletions *lc) {
 
 void monitor_init(const char * labelfile) {
     FILE *f;
-    char *p=NULL, *s, *end;
+    char buf[128], *s, *end;
     const char *label;
     uint16_t addr;
-    size_t n=0;
     int fail=0;
     linenoiseSetCompletionCallback(completion);
     linenoiseHistorySetMaxLen(256);
@@ -680,10 +671,15 @@ void monitor_init(const char * labelfile) {
             printf("Couldn't read labels from %s\n", labelfile);
             return;
         }
-        while (getline(&p, &n, f) > 0) {
-            label = strtok(p, "\t =");
+        while (fgets(buf, sizeof(buf), f) > 0) {
+            label = strtok(buf, "\t =");
             s = strtok(NULL, "\t =\n");
             end = 0;
+            /*
+                tailored to 64tass --labels output with 'symbol\t=\t$1234
+                enumerated constants are emitted in similar format, eg. with two digits
+                but we want to ignore those
+            */
             if (s && s[0] == '$' && strlen(s) == 5) addr = strtol(s+1, &end, 16);
             if (s && end > s+1) {
                 add_label(label, addr);
@@ -691,10 +687,10 @@ void monitor_init(const char * labelfile) {
                 fail++;
             }
         }
-        free(p);
         if (fail) printf("Discarded %d lines from %s\n", fail, labelfile);
         fclose(f);
     }
+    puts("c65: type ? for help, ctrl-C to break, quit to exit.");
 }
 
 void monitor_exit() {

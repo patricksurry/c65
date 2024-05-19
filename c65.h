@@ -1,15 +1,18 @@
-#define BREAK_ALWAYS  1
-#define BREAK_ONCE  2
-#define BREAK_EXECUTE (BREAK_ALWAYS | BREAK_ONCE)
-#define BREAK_READ  4
-#define BREAK_WRITE 8
-#define BREAK_ACCESS (BREAK_READ | BREAK_WRITE)
-#define BREAK_SHUTDOWN 128
+/* break conditions used in breakpoints */
+#define BREAK_READ  1
+#define BREAK_WRITE 2
+#define BREAK_PC    4
+#define BREAK_ONCE  8
+/* special break conditions */
+#define BREAK_BRK 16
+#define BREAK_INT 32
+#define BREAK_EXIT 64
 
 #define STEP_NONE 0
-#define STEP_RUN 1
-#define STEP_INST 2
-#define STEP_JSR 3
+#define STEP_INST 1
+#define STEP_NEXT 2
+#define STEP_OVER 3
+#define STEP_RUN 4
 
 extern uint8_t memory[65536];
 extern uint8_t breakpoints[65536];

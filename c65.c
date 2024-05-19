@@ -138,43 +138,50 @@ void show_cpu() {
 int main(int argc, char *argv[]) {
   const char *romfile = NULL, *labelfile = NULL;
   int addr = -1, start = -1, debug = 0, errflg = 0, c;
-  int brk_action = BREAK_SHUTDOWN;
-  uint16_t jsr_target = 0;
+  int brk_action = BREAK_EXIT;
+  uint16_t over_addr;
 
   while ((c = getopt(argc, argv, "xgr:a:s:m:b:l:")) != -1) {
     switch (c) {
-    case 'x':
-      brk_action = 0;
-      break;
-    case 'g':
-      debug = 1;
-      break;
-    case 'l':
-      labelfile = optarg;
-      debug = 1;
-      break;
-    case 'r':
-      romfile = optarg;
-      break;
-    case 'a':
-      addr = strtol(optarg, NULL, 0);
-      break;
-    case 's':
-      start = strtol(optarg, NULL, 0);
-      break;
-    case 'm':
-      io_addr = strtol(optarg, NULL, 0);
-      break;
-    case 'b':
-      io_blkfile(optarg);
-      break;
-    case ':': /* option without operand */
-      fprintf(stderr, "Option -%c requires an argument\n", optopt);
-      errflg++;
-      break;
-    case '?':
-      fprintf(stderr, "Unrecognized option: '-%c'\n", optopt);
-      errflg++;
+      case 'r':
+        romfile = optarg;
+        break;
+
+      case 'a':
+        addr = strtol(optarg, NULL, 0);
+        break;
+
+      case 's':
+        start = strtol(optarg, NULL, 0);
+        break;
+
+      case 'm':
+        io_addr = strtol(optarg, NULL, 0);
+        break;
+
+      case 'b':
+        io_blkfile(optarg);
+        break;
+
+      case 'l':
+        labelfile = optarg;
+        /* fall through */
+      case 'g':
+        debug = 1;
+        /* fall through */
+      case 'x':
+        brk_action = BREAK_BRK;
+        break;
+
+      case ':': /* option without operand */
+        fprintf(stderr, "Option -%c requires an argument\n", optopt);
+        errflg++;
+        break;
+
+      case '?':
+        fprintf(stderr, "Unrecognized option: '-%c'\n", optopt);
+        errflg++;
+        break;
     }
   }
 
@@ -192,7 +199,7 @@ int main(int argc, char *argv[]) {
             "-m <addr>  : Set magic IO base address (default 0xf000)\n"
             "-b <file>  : Use binary file for magic block storage\n"
             "-l <file>  : Read labels from file (implies -g)\n"
-            "-x         : BRK should reset via $fffe rather than exit\n"
+            "-x         : BRK should reset via $fffe rather than exit (implied by -g)\n"
             "-g         : Run with interactive debugger\n"
             "Note: address arguments can be specified in hex like 0x1234\n");
     exit(2);
@@ -208,27 +215,40 @@ int main(int argc, char *argv[]) {
     pc = (uint16_t)start;
   show_cpu();
 
-  while (!(break_flag & BREAK_SHUTDOWN)) {
-    if (debug) monitor_command();
+  /*
+  The simulator runs in one of several states:
+
+  STEP_NONE - simulation paused, e.g. during monitor command sequences.
+  STEP_INST - execute one instruction, counting a step towards step_target.
+  STEP_NEXT - execute any instruction except JSR, counting a step.
+    for JSR set over_addr to pc+3 and switch to STEP_OVER mode
+  STEP_OVER - execute instructions until pc = over_addr,
+    then count one step and switch back to STEP_NEXT
+  STEP_RUN - execute instructions until BREAK condition
+
+  Any BRK opcode generates BREAK_BRK or BREAK_EXIT (see -x)
+  Ctrl-C (SIGINT) generates BREAK_INT
+  */
+
+  while (!(break_flag & BREAK_EXIT)) {
+    if (debug) {
+      do { monitor_command(); } while (step_mode == STEP_NONE);
+    }
     break_flag = 0;
-    while (!break_flag && (step_mode == STEP_RUN || (step_mode && step_target))) {
-      if (step_mode == STEP_JSR) {
-        if (jsr_target) {
-          if (pc == jsr_target) {
-            step_target--;
-            jsr_target = 0;
-            if (!step_target) break;
-          }
-        } else {
-          if (memory[pc] == 0x20) jsr_target = pc+3;
-          else step_target--;
-        }
-      } else if (step_mode == STEP_INST) {
-        step_target--;
+    while (!break_flag && (step_mode == STEP_RUN || step_target)) {
+      if (step_mode == STEP_NEXT && memory[pc] == 0x20) { /* JSR ? */
+        step_mode = STEP_OVER;
+        over_addr = pc+3;
       }
       ticks += step6502();
-      break_flag |= breakpoints[pc] & BREAK_EXECUTE;
-      if (opcode == 0) break_flag |= BREAK_ONCE | brk_action;
+      if (step_mode == STEP_OVER && pc == over_addr) step_mode = STEP_NEXT;
+      if (opcode == 0x00) break_flag |= brk_action;  /* BRK ? */
+      if (breakpoints[pc] & BREAK_PC) break_flag |= BREAK_PC;
+      if (breakpoints[pc] & BREAK_ONCE) {
+        break_flag |= BREAK_ONCE;
+        breakpoints[pc] ^= BREAK_ONCE;
+      }
+      if (step_mode == STEP_NEXT || step_mode == STEP_INST) step_target--;
     }
   }
   show_cpu();
