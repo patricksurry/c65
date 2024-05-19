@@ -71,7 +71,7 @@ void _putc(char ch) { putchar((int)ch); }
 #endif
 
 #include <signal.h>
-
+#include <stdint.h>
 #include "magicio.h"
 #include "c65.h"
 
