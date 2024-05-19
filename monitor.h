@@ -1,3 +1,3 @@
-void monitor_init();
+void monitor_init(const char *labelfile);
 void monitor_exit();
-int monitor_command();
+void monitor_command();

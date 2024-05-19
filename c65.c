@@ -19,8 +19,7 @@ int rws[65536];
 int writes[65536];
 
 long ticks = 0;
-int break_flag = 0;
-
+int break_flag = 0, step_mode = STEP_RUN, step_target = -1;
 
 static uint8_t _opmodes[256] = { 255 };
 
@@ -38,9 +37,9 @@ static void (*_addrmodes[])() = {
 
 static const char* _opfmts[] = {
     "", "a",
-    "#$%x", "$%.2x", "$%.2x,x", "$%.2x,y",
-    "($%.2x)", "($%.2x,x)",  "($%.2x),y", "$%.4x ; %+d",
-    "$%.2x,$%.4x ; %+d", "$%.4x", "$%.4x,x", "$%.4x,y", "($%.4x)", "($%.4x,x)"
+    "#$%x", "%s", "%s,x", "%s,y",
+    "(%s)", "(%s,x)",  "(%s),y", "%s ; %+d",
+    "%s,%s  ; %+d", "%s", "%s,x", "%s,y", "(%s)", "(%s,x)"
 };
 
 
@@ -107,7 +106,7 @@ int load_memory(const char* romfile, int addr) {
   rewind(fin);
   if (addr < 0)
     addr = 65536 - sz;
-  printf("Reading %s to $%04x:$%04x\n", romfile, addr, addr+sz-1);
+  printf("c65: reading %s to $%04x:$%04x\n", romfile, addr, addr+sz-1);
   fread(memory + addr, 1, sz, fin);
   fclose(fin);
   return 0;
@@ -120,7 +119,7 @@ int save_memory(const char* romfile, uint16_t start, uint16_t end) {
     fprintf(stderr, "File not found: %s\n", romfile);
     return -1;
   }
-  printf("Writing $%04x:$%04x to %s", start, end, romfile);
+  printf("c65: writing $%04x:$%04x to %s", start, end, romfile);
   fwrite(memory+start, 1, end-start+1, fout);
   fclose(fout);
   return 0;
@@ -137,16 +136,21 @@ void show_cpu() {
 }
 
 int main(int argc, char *argv[]) {
-  const char *romfile = NULL;
+  const char *romfile = NULL, *labelfile = NULL;
   int addr = -1, start = -1, debug = 0, errflg = 0, c;
   int brk_action = BREAK_SHUTDOWN;
+  uint16_t jsr_target = 0;
 
-  while ((c = getopt(argc, argv, "xgr:a:s:m:b:")) != -1) {
+  while ((c = getopt(argc, argv, "xgr:a:s:m:b:l:")) != -1) {
     switch (c) {
     case 'x':
       brk_action = 0;
       break;
     case 'g':
+      debug = 1;
+      break;
+    case 'l':
+      labelfile = optarg;
       debug = 1;
       break;
     case 'r':
@@ -187,34 +191,44 @@ int main(int argc, char *argv[]) {
             "-s <addr>  : Start executing at addr instead of via reset vector\n"
             "-m <addr>  : Set magic IO base address (default 0xf000)\n"
             "-b <file>  : Use binary file for magic block storage\n"
+            "-l <file>  : Read labels from file (implies -g)\n"
             "-x         : BRK should reset via $fffe rather than exit\n"
             "-g         : Run with interactive debugger\n"
-            "Note: write hex address arguments like 0x1234\n");
+            "Note: address arguments can be specified in hex like 0x1234\n");
     exit(2);
   }
 
   if (load_memory(romfile, addr) != 0) exit(3);
 
   io_init(debug);
-  if (debug) monitor_init();
+  if (debug) monitor_init(labelfile);
 
-  printf("c65: starting\n");
-  show_cpu();
   reset6502();
-  show_cpu();
-
   if (start >= 0)
     pc = (uint16_t)start;
+  show_cpu();
 
-  int steps;
   while (!(break_flag & BREAK_SHUTDOWN)) {
-    steps = debug ? monitor_command() : -1;
+    if (debug) monitor_command();
     break_flag = 0;
-    while (steps && !break_flag) {
+    while (!break_flag && (step_mode == STEP_RUN || (step_mode && step_target))) {
+      if (step_mode == STEP_JSR) {
+        if (jsr_target) {
+          if (pc == jsr_target) {
+            step_target--;
+            jsr_target = 0;
+            if (!step_target) break;
+          }
+        } else {
+          if (memory[pc] == 0x20) jsr_target = pc+3;
+          else step_target--;
+        }
+      } else if (step_mode == STEP_INST) {
+        step_target--;
+      }
       ticks += step6502();
       break_flag |= breakpoints[pc] & BREAK_EXECUTE;
       if (opcode == 0) break_flag |= BREAK_ONCE | brk_action;
-      if (steps > 0) steps--;
     }
   }
   show_cpu();

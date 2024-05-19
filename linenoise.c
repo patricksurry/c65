@@ -312,9 +312,8 @@ static int enableRawMode(int fd) {
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     /* control modes - set 8 bit chars */
     raw.c_cflag |= (CS8);
-    /* local modes - choing off, canonical off, no extended functions,
-     * no signal chars (^Z,^C) */
-    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+    /* local modes - echoing off, canonical off, no extended functions */
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN);
     /* control chars - set return condition: min number of bytes and timer.
      * We want read to return every single byte, without timeout. */
     raw.c_cc[VMIN] = 1; raw.c_cc[VTIME] = 0; /* 1 byte, no timer */
@@ -1003,7 +1002,7 @@ static int linenoiseEdit(int stdin_fd, int stdout_fd, char *buf, size_t buflen, 
 //        } while((nread == -1) && (errno == EINTR));
         nread = readCode(l.ifd,cbuf,sizeof(cbuf),&c);
         if (nread <= 0) return l.len;
-        
+
 
         /* Only autocomplete when the callback is set. It returns < 0 when
          * there was an error reading from fd. Otherwise it will return the
@@ -1052,7 +1051,7 @@ static int linenoiseEdit(int stdin_fd, int stdout_fd, char *buf, size_t buflen, 
             {
               int pcl, ncl;
               char auxb[5];
-              
+
  	      pcl = prevCharLen(l.buf,l.len,l.pos,NULL);
 	      ncl = nextCharLen(l.buf,l.len,l.pos,NULL);
 //            printf("[%d %d %d]\n", pcl, l.pos, ncl);
