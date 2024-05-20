@@ -37,13 +37,12 @@ int org = -1;       /* the current address, reset to PC after each simulation st
 char _prompt[512];
 
 #define TXT_LO "\x1b[34m"
-#define TXT_HI "\x1b[1;7m"
 #define TXT_B1 "\x1b[41m"
 #define TXT_B2 "\x1b[42m"
 #define TXT_B3 "\x1b[44m"
 #define TXT_N  "\x1b[0m"
 
-#define FLAG_FMT(f) (status & FLAG_##f ? TXT_HI : TXT_LO)
+#define FLAG_FMT(f) (status & FLAG_##f ? TXT_B3 : TXT_LO)
 
 char* prompt() {
     sprintf(_prompt,
@@ -588,10 +587,10 @@ void cmd_help() {
         "\n"
         "Use ctrl-C to interrupt run or continue, type q or quit to exit.\n"
         "Commands will auto-complete from their initial characters.  For example\n"
-        "'d' becomes 'disassemble' while 'du' becomes 'dump'.  Tab completion is available\n"
+        "'d' becomes 'disassemble' while 'de' becomes 'delete'.  Tab completion is available\n"
         "along with command history using the up and down arrows.\n"
-        "Repeat commands like step, next, diasm or dump by just hitting enter.\n"
-        "The monitor maintains a current address so repeating (say) dump advances through memory.\n"
+        "Repeat commands like step, next, disassemble or memory by just hitting enter.\n"
+        "The monitor maintains a current address so repeating (say) mem advances through memory.\n"
         "Write all addresses and values in hex with no prefix, e.g. 123f.\n"
         "Labels can substituted for any address, including the special 'pc'.\n"
         "Ranges are written as start:end or start/offset with no spaces, e.g. 1234:1268, 1234/10, /20.\n"
