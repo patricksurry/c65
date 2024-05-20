@@ -74,7 +74,10 @@ const char* opfmt(uint8_t op) {
 uint8_t read6502(uint16_t addr) {
   io_magic_read(addr);
   rws[addr] += 1;
-  break_flag |= (breakpoints[addr] & BREAK_READ);
+  if (breakpoints[addr] & BREAK_READ) {
+    break_flag |= BREAK_READ;
+    printf("Break on reading $%.4x\n", addr);
+  }
   return memory[addr];
 }
 
@@ -83,7 +86,10 @@ void write6502(uint16_t addr, uint8_t val) {
   io_magic_write(addr, val);
   rws[addr] += 1;
   writes[addr] += 1;
-  break_flag |= breakpoints[addr] & BREAK_WRITE;
+  if (breakpoints[addr] & BREAK_WRITE) {
+    break_flag |= BREAK_WRITE;
+    printf("Break on writing $%.4x\n", addr);
+  }
   memory[addr] = val;
 }
 

@@ -2,6 +2,8 @@ TODO
 
 - Windows WSL and mac OS work OK, but windows native fails on termio - check whether there's an easy workaround.
 
+- disassemble backward would be handy
+
 - labelfile is very specific to default c64tass format, and tries to exclude numeric constants.
   maybe vice label format excluding constants is a better baseline since that also works for c65 etc.
 

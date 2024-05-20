@@ -440,18 +440,18 @@ void cmd_set() {
     char *p, *q;
     p = strtok(NULL, " ");
     if (!p) {
-        puts("Missing register/flag, expected one of a,x,y,sp,pc or n,v,b,d,i,z,c\n");
+        puts("Missing register/flag, expected one of a,x,y,sp,pc or n,v,b,d,i,z,c");
         return;
     }
     q = strchr(vars, tolower(*p));
     if (!q) {
-        puts("Unknown register/flag, expected one of a,x,y,sp,pc or n,v,b,d,i,z,c\n");
+        puts("Unknown register/flag, expected one of a,x,y,sp,pc or n,v,b,d,i,z,c");
         return;
     }
     i = q-vars;
     p = strtok(NULL, " ");
     if (!p) {
-        puts("Missing value in set\n");
+        puts("Missing value in set");
         return;
     }
     v = strtol(p, NULL, 16);
@@ -504,7 +504,7 @@ void cmd_label() {
         || isdigit(lbl[0])
         || strlen(lbl) != strspn(lbl, "_@0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
     ) {
-        puts("Invalid label\n");
+        puts("Invalid label");
         return;
     }
     if (0 == parse_addr(&addr, pc))
@@ -519,7 +519,7 @@ void cmd_unlabel() {
 
 void cmd_blockfile() {
     const char* p = strtok(NULL, " ");
-    if(!p) puts("Please provide filename\n");
+    if(!p) puts("Missing block file name");
     else io_blkfile(p);
 }
 
@@ -528,7 +528,7 @@ void cmd_load() {
     uint16_t addr;
 
     if (!fname) {
-        puts("Missing file name\n");
+        puts("Missing rom file name");
         return;
     }
     if (0 == parse_addr(&addr, -1)) {
@@ -542,7 +542,7 @@ void cmd_save() {
     const char* fname = strtok(NULL, " ");
 
     if (!fname) {
-        puts("Missing file name\n");
+        puts("Missing file name");
         return;
     }
     if (0 != parse_range(&start, &end, 0, 0)) return;
@@ -561,21 +561,21 @@ void cmd_quit() {
 
 void cmd_help() {
     int i;
-    for (i=0; /**/; i++) {
-        printf("%s %s\n", _cmds[i].name, _cmds[i].help);
-        if (0 == strcmp(_cmds[i].name, "?")) break;
-    }
-    printf(
+    puts("\nAvailable commands:\n\n");
+    for (i=0; 0 != strcmp(_cmds[i].name, "?"); i++)
+        printf("  %s %s\n", _cmds[i].name, _cmds[i].help);
+
+    puts(
         "\n"
         "Use ctrl-C to interrupt run or continue, type q or quit to exit.\n"
-        "Commands can be shortened to their first few characters, searched in the order above.\n"
-        "For example 'd' becomes 'disassemble' not 'dump'.  Tab completion is also available\n"
+        "Commands will auto-complete from their initial characters.  For example\n"
+        "'d' becomes 'disassemble' while 'du' becomes 'dump'.  Tab completion is available\n"
         "along with command history using the up and down arrows.\n"
-        "Commands like step, next, diasm or dump can be repeated by simply hitting enter.\n"
-        "The monitor maintains a current address so (say) repeating dump will progress through memory.\n"
+        "Repeat commands like step, next, diasm or dump by just hitting enter.\n"
+        "The monitor maintains a current address so repeating (say) dump advances through memory.\n"
         "Write all addresses and values in hex with no prefix, e.g. 123f.\n"
+        "Labels can substituted for any address, including the special 'pc'.\n"
         "Ranges are written as start:end or start/offset with no spaces, e.g. 1234:1268, 1234/10, /20.\n"
-        "Labels can be substituted interchangeably for addreses, including the special 'pc'.\n"
     );
 }
 
@@ -618,12 +618,14 @@ void parse_cmd(char *line) {
             cmd = _cmds+i;
             _repeat_cmd = cmd->repeatable ? cmd: NULL;
             cmd->handler();
-            break;
+            return;
         }
     }
+    puts("Unknown command, try ? for help");
 }
 
-void completion(const char *buf, linenoiseCompletions *lc) {
+
+void completion(const char *buf, linenoiseCompletions *lc, void *user_data) {
     int i;
     if (!strlen(buf)) return;
     for(i=0; i<n_cmds; i++) {
@@ -633,13 +635,14 @@ void completion(const char *buf, linenoiseCompletions *lc) {
     }
 }
 
+
 void monitor_init(const char * labelfile) {
     FILE *f;
     char buf[128], *s, *end;
     const char *label;
     uint16_t addr;
     int fail=0;
-    linenoiseSetCompletionCallback(completion);
+    linenoiseSetCompletionCallback(completion, NULL);
     linenoiseHistorySetMaxLen(256);
     linenoiseHistoryLoad(".c65");
 
@@ -687,7 +690,7 @@ void monitor_command() {
     if(strlen(line)) {
         linenoiseHistoryAdd(line);
         parse_cmd(line);
-        linenoiseFree(line);
+        free(line);
     } else if (_repeat_cmd) {
         /* empty line can repeat some commands */
         _repeat_cmd->handler();
