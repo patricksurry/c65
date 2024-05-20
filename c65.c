@@ -213,13 +213,13 @@ int main(int argc, char *argv[]) {
 
   if (load_memory(romfile, addr) != 0) exit(3);
 
-  io_init(debug);
-  if (debug) monitor_init(labelfile);
-
   reset6502();
   if (start >= 0)
     pc = (uint16_t)start;
   show_cpu();
+
+  io_init(debug);
+  if (debug) monitor_init(labelfile);
 
   /*
   The simulator runs in one of several states:

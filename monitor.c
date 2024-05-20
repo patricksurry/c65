@@ -36,16 +36,25 @@ int org = -1;       /* the current address, reset to PC after each simulation st
 
 char _prompt[512];
 
+#define TXT_LO "\x1b[34m"
+#define TXT_HI "\x1b[1;7m"
+#define TXT_B1 "\x1b[41m"
+#define TXT_B2 "\x1b[42m"
+#define TXT_B3 "\x1b[44m"
+#define TXT_N  "\x1b[0m"
+
+#define FLAG_FMT(f) (status & FLAG_##f ? TXT_HI : TXT_LO)
+
 char* prompt() {
     sprintf(_prompt,
-        "\x1b[2mPC\x1b[m %.4x  "
-        "\x1b[%cmN\x1b[m\x1b[%cmV\x1b[m\x1b[2m-\x1b[m\x1b[%cmB\x1b[m\x1b[%cmD\x1b[m\x1b[%cmI\x1b[m\x1b[%cmZ\x1b[m\x1b[%cmC\x1b[m  "
-        "\x1b[2mA\x1b[m %.2x \x1b[2mX\x1b[m %.2x \x1b[2mY\x1b[m %.2x \x1b[2mSP\x1b[m %.2x > ",
+        TXT_LO "PC" TXT_N " %.4x  "
+        "%sN" TXT_N "%sV" TXT_N TXT_LO "-" TXT_N "%sB" TXT_N
+        "%sD" TXT_N "%sI" TXT_N "%sZ" TXT_N "%sC" TXT_N "  "
+        TXT_LO "A " TXT_N "%.2x " TXT_LO "X " TXT_N "%.2x " TXT_LO "Y " TXT_N "%.2x " TXT_LO "SP " TXT_N "%.2x "
+        TXT_LO "> " TXT_N,
         pc,
-        status & FLAG_SIGN ? '0' : '2', status & FLAG_OVERFLOW ? '0' : '2',
-        /* - */ status & FLAG_BREAK ? '0' : '2',
-        status & FLAG_DECIMAL ? '0' : '2', status & FLAG_INTERRUPT ? '0' : '2',
-        status & FLAG_ZERO ? '0' : '2', status & FLAG_CARRY ? '0' : '2',
+        FLAG_FMT(SIGN), FLAG_FMT(OVERFLOW), /* - */ FLAG_FMT(BREAK),
+        FLAG_FMT(DECIMAL), FLAG_FMT(INTERRUPT), FLAG_FMT(ZERO), FLAG_FMT(CARRY),
         a, x, y, sp
     );
     return _prompt;
@@ -209,13 +218,14 @@ uint16_t disasm(uint16_t start, uint16_t end) {
     int8_t offset;
     char line[80], buf[32], *p;
     const char *fmt, *label;
+    const int n_fmt = strlen(TXT_LO);
     uint16_t addr;
     /*
-    0         1         2         3         4         5
-    0123456789012345678901234567890123456789012345678901234567890
-    ^[1m ^[m  abcd  ^[2maa bb cc  ^[mbbr3 $zp,$rr
-    ^[1m*^[mB abce  ^[2maa bb     ^[mbne  $rr
-    ^[1m ^[m  abdf  ^[2maa bb cc  ^[mlda  ($abcd,x)
+    0          1          2         3
+    012345678 9012345678 90123456789012345
+       abcd  <aa bb cc  >bbr3 $zp,$rr
+    *B abce  <aa bb     >bne  $rr
+       abdf  <aa bb cc  >lda  ($abcd,x)
     */
     for (addr = start; addr < end; /**/){
         label = label_for_address(addr);
@@ -223,11 +233,12 @@ uint16_t disasm(uint16_t start, uint16_t end) {
         /* clear line and show addresss with break and PC info */
         memset(line, ' ', sizeof(line));
         p = line;
-        p += sprintf(line, "\x1b[1m%c\x1b[m", pc==addr?'*':' ');
-        *p = ' ';
-        if (breakpoints[addr] & BREAK_PC) line[8] = 'B';
-        p = line+10;
-        p += sprintf(p, "%.4x  \x1b[2m", addr);
+        p += sprintf(
+            line, "%c%c %.4x  " TXT_LO,
+            pc == addr ? '*' : ' ',
+            breakpoints[addr] & BREAK_PC ? 'B': ' ',
+            addr
+        );
 
         /* show bytes associated with this opcode */
         op = memory[addr];
@@ -237,8 +248,8 @@ uint16_t disasm(uint16_t start, uint16_t end) {
         *p = ' ';
 
         /* show the name of the opcode */
-        p = line+30;
-        p += sprintf(p, "\x1b[m%.4s ", opname(op));
+        p = line + 19 + n_fmt;
+        p += sprintf(p, TXT_N "%.4s ", opname(op));
         addr++;
 
         /* show the addressing mode detail */
@@ -276,34 +287,42 @@ void dump(uint16_t start, uint16_t end) {
     01234567890123456789012345678901234567890123456789012345678901234567890123
     0000  d8 a9 78 85 12 a9 be 85  13 a2 1d bd 49 a3 95 00  |..x.........I...|
     */
-    uint16_t addr = start, nibble = addr & 0xf;
-    char line[75], *p;
-    uint8_t c;
-
-    line[74] = 0;
+    uint16_t addr = start & 0xfff0;
+    char line[256], chrs[16], *p;
+    uint8_t c, v;
 
     while(addr < end) {
-        memset(line, ' ', 74);
-        line[56] = '|';
-        line[73] = '|';
-
+        memset(chrs, ' ', 16);
         p = line;
-        p += sprintf(p, "%.4x", addr & 0xfff0);
-        *p = ' ';
-        p += 2 + nibble*3 + (nibble > 7 ? 1: 0);
+        /* show the address */
+        p += sprintf(p, "%.4x  ", addr);
+        /* show blanks before truncated address */
+        while (addr < start) p += sprintf(p, "   %s", (++addr & 0xf) == 8 ? " ":"");
 
         do {
-            c = memory[addr];
-            line[57 + nibble] = (c >= 32 && c < 128 ? c : '.');
-            c = breakpoints[addr];
-            c = c & BREAK_READ ? (c & BREAK_WRITE ? '*': '@') : (c & BREAK_WRITE ? '!': ' ');
-            p += sprintf(p, "%.2x%c", memory[addr++], c);
-            *p = ' ';
-            nibble = addr & 0xf;
-            if (nibble == 8) p++;
-        } while(nibble && addr < end);
+            if (addr < end) {
+                c = memory[addr];
+                chrs[addr & 0xf] = (c >= 32 && c < 128 ? c : '.');
+                c = breakpoints[addr] & (BREAK_READ | BREAK_WRITE);
+                v = memory[addr++];
+                p += sprintf(p, "%s%.2x%s%s",
+                    c & BREAK_READ ?
+                        (c & BREAK_WRITE ? TXT_B1: TXT_B2)
+                        : (c & BREAK_WRITE ? TXT_B3: ""),
+                    v,
+                    c ? TXT_N: "",
+                    (addr & 0xf) == 8 ? "  " : " "
+                );
+            } else {
+                addr++;
+                p += sprintf(p, "   %s", (addr & 0xf) == 8 ? " ":"");
+            }
+        } while((addr & 0xf) && addr < end);
+        /* show blanks padding end of range */
+        while (addr & 0xf) p += sprintf(p, "   %s", (++addr & 0xf) == 8 ? " ":"");
 
-        printf("%s\n", line);
+        sprintf(p, " |%.16s|", chrs);
+        puts(line);
     }
 }
 
@@ -377,7 +396,7 @@ void cmd_disasm() {
 }
 
 
-void cmd_dump() {
+void cmd_memory() {
     uint16_t start, end;
 
     if (0 != parse_range(&start, &end, org, 64)) return;
@@ -587,7 +606,7 @@ Command _cmds[] = {
     { "call", "addr - call subroutine leaving PC unchanged", 0, cmd_call },
 
     { "disassemble", "[range] - show code disassembly for range (or current)", 1, cmd_disasm },
-    { "dump", "[range] - show memory contents for range (or current)", 1, cmd_dump },
+    { "memory", "[range] - dump memory contents for range (or current)", 1, cmd_memory },
     { "stack", "- show stack contents, sp+1 through $1ff", 0, cmd_stack },
     { "break",  "[range] r|w|a|x - trigger break on read, write, any access or execute (default)", 0, cmd_break },
     { "delete",  "[range] - remove all breakpoints in range (default all)", 0, cmd_delete },
@@ -668,10 +687,10 @@ void monitor_init(const char * labelfile) {
                 fail++;
             }
         }
-        if (fail) printf("Discarded %d lines from %s\n", fail, labelfile);
+        if (fail) printf("Skipped %d lines from %s\n", fail, labelfile);
         fclose(f);
     }
-    puts("c65: type ? for help, ctrl-C to break, quit to exit.");
+    puts("Type ? for help, ctrl-C to interrupt, quit to exit.");
 }
 
 void monitor_exit() {
