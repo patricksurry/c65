@@ -1,17 +1,13 @@
 TODO
 
-- Windows WSL and mac OS work OK, but windows native fails on termio - check whether there's an easy workaround.
+- disassemble backward from PC would be handy but seems indeterminate, e.g. bytes $20 $80 $60 before
+  PC could be JSR $6080, BRA $60 or RTS
 
-- disassemble backward would be handy
+- labelfile is currently very specific to default c64tass format. It also tries to exclude numeric constants
+  by only adding labels with an address starting with `$` followed by four digits.
+  Perhaps vice label format (excluding constants) would be a better standard which would also work for `ca65`.
 
-- labelfile is very specific to default c64tass format, and tries to exclude numeric constants.
-  maybe vice label format excluding constants is a better baseline since that also works for c65 etc.
-
-- the monitor currently keeps the last label for any given address.  probably better to allow
-  multiple labels per address (e.g. z_number, xt_editor_wordlist, xt_one).  disasm could display
-  all of them at their address, but would still need to pick one for references
-
-- add command to dump stats which are already collected.  this used to be a command-line option.
+- needs command to dump the stats which are already collected.  this used to be a command-line option.
 
   FILE *fout;
   fout = fopen("c65-coverage.dat", "wb");

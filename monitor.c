@@ -13,15 +13,20 @@
 #include "magicio.h"
 #include "linenoise.h"
 
+/*
+Linked list of symbolic address labels.
+We can have multiple labels for a single address,
+but require that label names are unique.
+*/
 typedef struct Label {
-    const char *label;
+    const char *name;
     uint16_t addr;
     struct Label* next;
 } Label;
 
 typedef struct Command {
-    const char * name;
-    const char * help;
+    const char *name;
+    const char *help;
     int repeatable;
     void (*handler)();
 } Command;
@@ -59,61 +64,81 @@ char* prompt() {
     return _prompt;
 }
 
-void add_label(const char* label, uint16_t addr) {
+void add_label(const char* name, uint16_t addr) {
     Label *l, *prv;
 
-    /* discard any existing label(s) with matching name or address */
+    /* first discard any existing label with the same name */
     for (prv=NULL, l=labels; l; prv=l, l=l->next) {
-        if (l->addr == addr || 0==strcmp(l->label, label)) {
-            if (prv) {
-                prv->next = l->next;
-            } else {
-                labels = l->next;
-            }
-            free((void*)l->label);
+        if (0==strcmp(l->name, name)) {
+            if (prv) prv->next = l->next;
+            else labels = l->next;
+            free((void*)l->name);
             free(l);
-            l = prv ? prv : labels;
+            break;
         }
     }
 
-    /* add new label to head of list*/
+    /* add the new label to head of list*/
     l = malloc(sizeof(Label));
-    l->label = strdup(label);
+    l->name = strdup(name);
     l->addr = addr;
     l->next = labels;
     labels = l;
 }
 
-void del_label(uint16_t addr) {
+void del_labels(const char *name_or_addr) {
     Label *prv, *l;
+    char *q;
+    uint16_t addr;
 
-    /* find label before the one we want to delete */
-    for (prv=NULL, l=labels; l && l->addr != addr; prv=l, l=l->next) /**/ ;
-
+    /* first look for a label with matching name */
+    for (prv=NULL, l=labels; l && 0 != strcmp(l->name, name_or_addr); prv=l, l=l->next) /**/ ;
     if (l) {
-        if (prv) {
-            prv->next = l->next;
-        } else {
-            labels = l->next;
-        }
-        free((void*)l->label);
+        if (prv) prv->next = l->next;
+        else labels = l->next;
+        free((void*)l->name);
         free(l);
+        return;
     }
+    /* otherwise try parsing as address */
+    addr = strtol(name_or_addr, &q, 16);
+    if (q == name_or_addr) {
+        puts("No matching name or address");
+        return;
+    }
+
+    /* remove all labels matching addr */
+    for (prv=NULL, l=labels; l; prv=l, l=l->next) {
+        if(l->addr == addr) {
+            if (prv) prv->next = l->next;
+            else labels = l->next;
+            free((void*)l->name);
+            free(l);
+            l = prv ? prv : labels;
+            q = NULL;
+        }
+    }
+    if (q) printf("No labels for $%.4x\n", addr);
 }
 
 const char* label_for_address(uint16_t addr) {
+    /* return first label name matching address */
     Label *l;
 
-    for (l=labels; l && l->addr != addr; l=l->next) /**/ ;
-    return (l && l->addr == addr) ? l->label : NULL;
+    for (l=labels; l; l=l->next) {
+        if (l->addr == addr) return l->name;
+    }
+    return NULL;
 }
 
-int address_for_label(const char* s) {
+int address_for_label(const char* name) {
     Label *l;
 
-    if (0 == strcasecmp(s, "pc")) return pc;
-    for (l=labels; l && strcmp(s, l->label) != 0; l=l->next) /**/ ;
-    return l ? l->addr : -1;
+    if (0 == strcasecmp(name, "pc")) return pc;
+    for (l=labels; l; l=l->next)
+        if (strcmp(name, l->name) == 0)
+            return l->addr;
+    return -1;
 }
 
 int _parse_addr(char *p, uint16_t *addr, int dflt) {
@@ -216,7 +241,8 @@ uint16_t disasm(uint16_t start, uint16_t end) {
     uint8_t op, k, n;
     int8_t offset;
     char line[80], buf[32], *p;
-    const char *fmt, *label;
+    const char *fmt;
+    Label *l;
     const int n_fmt = strlen(TXT_LO);
     uint16_t addr;
     /*
@@ -227,8 +253,10 @@ uint16_t disasm(uint16_t start, uint16_t end) {
        abdf  <aa bb cc  >lda  ($abcd,x)
     */
     for (addr = start; addr < end; /**/){
-        label = label_for_address(addr);
-        if (label) printf("%s:\n", label);
+        /* show any labels for this address */
+        for (l=labels; l; l=l->next)
+            if (l->addr == addr) printf("%s:\n", l->name);
+
         /* clear line and show addresss with break and PC info */
         memset(line, ' ', sizeof(line));
         p = line;
@@ -530,9 +558,9 @@ void cmd_label() {
 }
 
 void cmd_unlabel() {
-    uint16_t addr;
-    if (0 == parse_addr(&addr, -1))
-        del_label(addr);
+    const char *p = strtok(NULL, " ");
+    if(!p) puts("Missing label name or address");
+    else del_labels(p);
 }
 
 void cmd_blockfile() {

@@ -117,7 +117,6 @@ void io_init(int debug) {
   if (debug) signal(SIGINT, sigint_handler);
 }
 
-
 void io_exit() {
     io_blkfile(NULL);
 }
