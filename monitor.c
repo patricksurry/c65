@@ -670,14 +670,14 @@ void cmd_help() {
     puts(
         "\n"
         "Type q to exit. Use ctrl-C to interrupt the simulator.\n"
-        "Commands auto-complete from their initial characters in the order above.\n"
+        "Commands can be shortened to their first few letters, searched in the order above.\n"
         "For example 'd' means 'disassemble' while 'de' becomes 'delete'.\n"
         "Tab completion and command history (up/down) are also available.\n"
         "Enter repeats commands like step, next, dis or mem as they advance through memory.\n"
         "Values are normally written as hex, e.g. 123f, or with an explicit prefix for\n"
         "binary (%), octal (&), decimal (#), hex ($) or printable ascii (').\n"
         "The ~ command can be useful to show values in different bases.\n"
-        "Case sensitive labels (and the special 'pc') can be used as addresses but not values.\n"
+        "Case sensitive labels (and the dynamic 'pc') can be used as addresses but not values.\n"
         "Write ranges as start:end or start/offset, e.g. 1234:1268, pc/10, 1234, /20, :label.\n"
     );
 }
