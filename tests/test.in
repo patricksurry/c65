@@ -17,8 +17,9 @@ next
 d
 c
 stack
+~ 32 #50 &12
 fill 400/f 12 34
-f 410 1 2 3 4
+f 410 30 $31 '2 #51 %110100 35
 f                   ; check for error on empty fill
 mem 400
 mem 400/20

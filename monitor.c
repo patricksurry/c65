@@ -70,7 +70,7 @@ int _str2val(const char *p, uint16_t *value, int dflt, const char* kind) {
     /* return 0 on success else error code */
 
     char *q;
-    int v;
+    int v, base=16;
 
     if (!p) {
         if (dflt < 0) {
@@ -78,8 +78,20 @@ int _str2val(const char *p, uint16_t *value, int dflt, const char* kind) {
             return E_MISSING;
         }
         *value = (uint16_t)dflt;
+    } else if (*p == 0x27) {  /* single quote */
+        *value = *++p;
     } else {
-        v = strtol(p, &q, 16);
+        switch (*p) {
+            case '#':
+                base=10; p++; break;
+            case '%':
+                base=2; p++; break;
+            case '&':
+                base=8; p++; break;
+            case '$':
+                base=16; p++; break;
+        }
+        v = strtol(p, &q, base);
         if (*q) {
             printf("Invalid %s '%s'\n", kind, p);
             return E_PARSE;
@@ -561,6 +573,30 @@ void cmd_fill() {
     }
 }
 
+const char* bitstr(uint16_t v) {
+    char buf[17], *p;
+    for(p=buf+15; p>=buf; p--, v >>= 1)
+        *p = v & 1 ? '1': '0';
+    buf[16] = 0;
+    for(p=buf; *p == '0'; p++) /**/ ;
+    return p;
+}
+
+void cmd_convert() {
+    char *p;
+    int n=0;
+    uint16_t val;
+
+    while((p = strtok(NULL, " \t"))) {
+        n++;
+        if (E_OK != _str2val(p, &val, -1, "value")) return;
+        printf("%s\t$%x  #%d  &%o  %%%s", p, val, val, val, bitstr(val));
+        if (32 <= val && val < 127) printf("  '%c", val);
+        puts("");
+    }
+    if(!n) puts("No values to convert");
+}
+
 void cmd_label() {
     const char *lbl = strtok(NULL, " \t");
     uint16_t addr;
@@ -633,15 +669,16 @@ void cmd_help() {
 
     puts(
         "\n"
-        "Use ctrl-C to interrupt run or continue, type q or quit to exit.\n"
+        "Type q to exit. Use ctrl-C to interrupt the simulator.\n"
         "Commands auto-complete from their initial characters in the order above.\n"
         "For example 'd' means 'disassemble' while 'de' becomes 'delete'.\n"
-        "Tab completion and command history (up/down) is also available.\n"
-        "Repeat commands like step, next, disassemble or memory by just hitting enter.\n"
-        "The monitor keeps a current address so repeating (say) mem advances through memory.\n"
-        "Write all addresses and values in hex with no prefix, e.g. 123f.\n"
-        "Case senstive labels (or the special 'pc') can be used in place of any address.\n"
-        "Write ranges as start:end or start/offset, e.g. 1234:1268, 1234/10, 1234, /20, :1234.\n"
+        "Tab completion and command history (up/down) are also available.\n"
+        "Enter repeats commands like step, next, dis or mem as they advance through memory.\n"
+        "Values are normally written as hex, e.g. 123f, or with an explicit prefix for\n"
+        "binary (%), octal (&), decimal (#), hex ($) or printable ascii (').\n"
+        "The ~ command can be useful to show values in different bases.\n"
+        "Case sensitive labels (and the special 'pc') can be used as addresses but not values.\n"
+        "Write ranges as start:end or start/offset, e.g. 1234:1268, pc/10, 1234, /20, :label.\n"
     );
 }
 
@@ -659,6 +696,7 @@ Command _cmds[] = {
     { "delete",  "[range] - remove all breakpoints in range (default all)", 0, cmd_delete },
     { "set", "{a|x|y|sp|pc|n|v|d|i|z|c} value - modify a register or flag", 0, cmd_set },
     { "fill", "range value ... - set memory contents in range to value(s)", 0, cmd_fill },
+    { "~", "value ... - show each value in binary, octal, hex and decimal", 0, cmd_convert },
     { "label", "name addr - add a symbolic name for addr", 0, cmd_label },
     { "unlabel", "name|addr - remove label by name or addr", 0, cmd_unlabel },
 
@@ -679,8 +717,8 @@ void parse_cmd(char *line) {
     Command *cmd;
     int i;
 
-    /* strip comments starting with ; or # */
-    p = strpbrk(line, ";#");
+    /* strip comments starting with ; */
+    p = strpbrk(line, ";");
     if (p) *p = 0;
     p = strtok(line, " \t");
     if (!p) return;

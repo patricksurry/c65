@@ -1,9 +1,9 @@
 These are basic tests of monitor functionality using a tiny wozmon image.
 
-Build wozmon.rom and wozmon.sym with:
+Rebuild wozmon.rom and wozmon.sym if required:
 
     64tass --nostart --labels=wozmon.sym --output wozmon.rom wozmon.asm
 
 Run the tests like:
 
-    ./c65 -r wozmon.rom -l wozmon.sym < test.in | perl -pe 's/\x1b\[[0-9;]*[mG]//g' > test.out
+    ./c65 -r tests/wozmon.rom -l tests/wozmon.sym < tests/test.in | perl -pe 's/\x1b\[[0-9;]*[mG]//g' > tests/test.out
