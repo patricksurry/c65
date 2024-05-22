@@ -126,7 +126,7 @@ int save_memory(const char* romfile, uint16_t start, uint16_t end) {
     return -1;
   }
   printf("c65: writing $%04x:$%04x to %s", start, end, romfile);
-  fwrite(memory+start, 1, end-start+1, fout);
+  fwrite(memory+start, 1, (end < start ? 0x10000 : end) - start + 1, fout);
   fclose(fout);
   return 0;
 }

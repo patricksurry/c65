@@ -47,22 +47,48 @@ char _prompt[512];
 #define TXT_B3 "\x1b[44m"
 #define TXT_N  "\x1b[0m"
 
-#define FLAG_FMT(f) (status & FLAG_##f ? TXT_B3 : TXT_LO)
+#define FLAG_FMT(f, ch) (status & FLAG_##f ? TXT_B3 : TXT_LO), (status & FLAG_##f ? ch: tolower(ch))
 
 char* prompt() {
     sprintf(_prompt,
         TXT_LO "PC" TXT_N " %.4x  "
-        "%sN" TXT_N "%sV" TXT_N TXT_LO "-" TXT_N "%sB" TXT_N
-        "%sD" TXT_N "%sI" TXT_N "%sZ" TXT_N "%sC" TXT_N "  "
+        "%s%c" TXT_N "%s%c" TXT_N TXT_LO "-" TXT_N "%s%c" TXT_N
+        "%s%c" TXT_N "%s%c" TXT_N "%s%c" TXT_N "%s%c" TXT_N "  "
         TXT_LO "A " TXT_N "%.2x " TXT_LO "X " TXT_N "%.2x " TXT_LO "Y " TXT_N "%.2x " TXT_LO "SP " TXT_N "%.2x "
         TXT_LO "> " TXT_N,
         pc,
-        FLAG_FMT(SIGN), FLAG_FMT(OVERFLOW), /* - */ FLAG_FMT(BREAK),
-        FLAG_FMT(DECIMAL), FLAG_FMT(INTERRUPT), FLAG_FMT(ZERO), FLAG_FMT(CARRY),
+        FLAG_FMT(SIGN, 'N'), FLAG_FMT(OVERFLOW, 'V'), /* - */ FLAG_FMT(BREAK, 'B'),
+        FLAG_FMT(DECIMAL, 'D'), FLAG_FMT(INTERRUPT, 'I'), FLAG_FMT(ZERO, 'Z'), FLAG_FMT(CARRY, 'C'),
         a, x, y, sp
     );
     return _prompt;
 }
+
+
+int _str2val(const char *p, uint16_t *value, int dflt, const char* kind) {
+    /* parse word value, with default if >= 0 */
+    /* return 0 on success else error code */
+
+    char *q;
+    int v;
+
+    if (!p) {
+        if (dflt < 0) {
+            printf("Missing %s\n", kind);
+            return E_MISSING;
+        }
+        *value = (uint16_t)dflt;
+    } else {
+        v = strtol(p, &q, 16);
+        if (*q) {
+            printf("Invalid %s '%s'\n", kind, p);
+            return E_PARSE;
+        }
+        *value = (uint16_t)v;
+    }
+    return E_OK;
+}
+
 
 void add_label(const char* name, uint16_t addr) {
     Label *l, *prv;
@@ -91,7 +117,7 @@ void del_labels(const char *name_or_addr) {
     char *q;
     uint16_t addr;
 
-    /* first look for a label with matching name */
+    /* first check for label with matching name */
     for (prv=NULL, l=labels; l && 0 != strcmp(l->name, name_or_addr); prv=l, l=l->next) /**/ ;
     if (l) {
         if (prv) prv->next = l->next;
@@ -101,11 +127,7 @@ void del_labels(const char *name_or_addr) {
         return;
     }
     /* otherwise try parsing as address */
-    addr = strtol(name_or_addr, &q, 16);
-    if (q == name_or_addr) {
-        puts("No matching name or address");
-        return;
-    }
+    if (E_OK != _str2val(name_or_addr, &addr, -1, "address")) return;
 
     /* remove all labels matching addr */
     for (prv=NULL, l=labels; l; prv=l, l=l->next) {
@@ -141,11 +163,10 @@ int address_for_label(const char* name) {
     return -1;
 }
 
-int _parse_addr(char *p, uint16_t *addr, int dflt) {
-    /* parse address, with default if >= 0 */
-    /* return 0 on success else error code */
 
-    char *q;
+int _str2addr(const char *p, uint16_t *addr, int dflt) {
+    /* parse addr value (numeric or label), with default if >= 0 */
+    /* return 0 on success else error code */
     int v;
 
     if (!p) {
@@ -155,13 +176,11 @@ int _parse_addr(char *p, uint16_t *addr, int dflt) {
         }
         *addr = (uint16_t)dflt;
     } else {
+        /* is it a label? */
         v = address_for_label(p);
         if (v < 0) {
-            v = strtol(p, &q, 16);
-            if (q==p) {
-                printf("Couldn't parse address '%s'\n", p);
-                return E_PARSE;
-            }
+            /* maybe a plain address? */
+            return _str2val(p, addr, dflt, "address");
         }
         *addr = (uint16_t)v;
     }
@@ -169,17 +188,17 @@ int _parse_addr(char *p, uint16_t *addr, int dflt) {
 }
 
 int parse_addr(uint16_t *addr, int dflt) {
-    char *p = strtok(NULL, " ");
-    return _parse_addr(p, addr, dflt);
+    char *p = strtok(NULL, " \t");
+    return _str2addr(p, addr, dflt);
 }
 
 int parse_range(uint16_t* start, uint16_t* end, int dflt_start, int dflt_length) {
     /* parse a range witten as a single string start:end or start/offset  */
     char *p, *q, sep;
-    uint16_t dflt_end;
+    uint16_t offset;
     int v;
 
-    p = strtok(NULL, " ");
+    p = strtok(NULL, " \t");
     if (!p) {
         if (dflt_start < 0 || dflt_length < 0) {
             puts("Missing range");
@@ -198,22 +217,18 @@ int parse_range(uint16_t* start, uint16_t* end, int dflt_start, int dflt_length)
             *start = (uint16_t)dflt_start;
         } else {
             if (q) *q = 0;   // terminate p so we can parse addr
-            v = _parse_addr(p, start, dflt_start);
+            v = _str2addr(p, start, dflt_start);
             if (v!=0) return v;
         }
-        dflt_end = *start + (uint16_t)dflt_length;
         switch (sep) {
             case ':':
-                v =  _parse_addr(++q, end, dflt_length < 0 ? -1 : dflt_end);
+                v =  _str2addr(++q, end, -1);
                 if (v!=0) return v;
                 break;
             case '/':
-                v = strtol(++q, &p, 16);
-                if (p == q) {
-                    printf("Couldn't parse offset '%s'\n", q);
-                    return E_PARSE;
-                }
-                *end = *start + v;
+                v = _str2val(++q, &offset, -1, "offset");
+                if (v != E_OK) return v;
+                *end = *start + offset;
                 break;
             default:
                 /* only start address was given */
@@ -221,7 +236,7 @@ int parse_range(uint16_t* start, uint16_t* end, int dflt_start, int dflt_length)
                     puts("Missing :end or /offset for range");
                     return E_MISSING;
                 }
-                *end = dflt_end;
+                *end = *start + (uint16_t)dflt_length;
         }
     }
     return E_OK;
@@ -244,7 +259,8 @@ uint16_t disasm(uint16_t start, uint16_t end) {
     const char *fmt;
     Label *l;
     const int n_fmt = strlen(TXT_LO);
-    uint16_t addr;
+    int addr, endl = end < start ? 0x10000 : end;
+
     /*
     0          1          2         3
     012345678 9012345678 90123456789012345
@@ -252,7 +268,7 @@ uint16_t disasm(uint16_t start, uint16_t end) {
     *B abce  <aa bb     >bne  $rr
        abdf  <aa bb cc  >lda  ($abcd,x)
     */
-    for (addr = start; addr < end; /**/){
+    for (addr = start; addr < endl; /**/){
         /* show any labels for this address */
         for (l=labels; l; l=l->next)
             if (l->addr == addr) printf("%s:\n", l->name);
@@ -314,11 +330,11 @@ void dump(uint16_t start, uint16_t end) {
     01234567890123456789012345678901234567890123456789012345678901234567890123
     0000  d8 a9 78 85 12 a9 be 85  13 a2 1d bd 49 a3 95 00  |..x.........I...|
     */
-    uint16_t addr = start & 0xfff0;
+    int addr = start & 0xfff0, endl = end < start ? 0x10000 : end;
     char line[256], chrs[16], *p;
     uint8_t c, v;
 
-    while(addr < end) {
+    while(addr < endl) {
         memset(chrs, ' ', 16);
         p = line;
         /* show the address */
@@ -327,7 +343,7 @@ void dump(uint16_t start, uint16_t end) {
         while (addr < start) p += sprintf(p, "   %s", (++addr & 0xf) == 8 ? " ":"");
 
         do {
-            if (addr < end) {
+            if (addr < endl) {
                 c = memory[addr];
                 chrs[addr & 0xf] = (c >= 32 && c < 128 ? c : '.');
                 c = breakpoints[addr] & (BREAK_READ | BREAK_WRITE);
@@ -344,7 +360,7 @@ void dump(uint16_t start, uint16_t end) {
                 addr++;
                 p += sprintf(p, "   %s", (addr & 0xf) == 8 ? " ":"");
             }
-        } while((addr & 0xf) && addr < end);
+        } while((addr & 0xf) && addr < endl);
         /* show blanks padding end of range */
         while (addr & 0xf) p += sprintf(p, "   %s", (++addr & 0xf) == 8 ? " ":"");
 
@@ -372,15 +388,12 @@ void cmd_continue() {
 }
 
 void _cmd_single(int mode) {
-    char *p = strtok(NULL, " "), *q;
-    int v;
+    char *p = strtok(NULL, " \t");
+    uint16_t steps = 1;
     disasm(pc, pc+1);
     step_mode = mode;
-    step_target = 1;
-    if (p) {
-        v = strtol(p, &q, 16);
-        if (q != p) step_target = v;
-    }
+    if (p && (E_OK != _str2val(p, &steps, -1, "steps"))) return;
+    step_target = steps;
     if (step_target > 1) puts("...");
 }
 
@@ -441,11 +454,14 @@ void cmd_break() {
     uint16_t start, end;
     uint8_t f=0;
     char *p;
+    int endl;
 
     if (0 != parse_range(&start, &end, pc, 1)) return;
 
-    p = strtok(NULL, " ");
-    switch(p?tolower(*p):'x') {
+    endl = end < start ? 0x10000 : end;
+
+    p = strtok(NULL, " \t");
+    switch(p ? tolower(*p):'x') {
         case 'r':
             f = BREAK_READ;
             break;
@@ -460,7 +476,7 @@ void cmd_break() {
             break;
     }
     if (f) {
-        for(/**/; start < end; start++)
+        for(/**/; start < endl; start++)
             breakpoints[start] |= f;
         org = start;
     } else {
@@ -471,10 +487,13 @@ void cmd_break() {
 
 void cmd_delete() {
     uint16_t start, end;
+    int endl;
 
     if (0 != parse_range(&start, &end, pc, 1)) return;
 
-    for(/**/; start < end; start++)
+    endl = end < start ? 0x10000 : end;
+
+    for(/**/; start < endl; start++)
         breakpoints[start] = 0;
     org = start;
 }
@@ -482,9 +501,10 @@ void cmd_delete() {
 
 void cmd_set() {
     const char *vars = "axysp nv bdizc";    /* 0-4 are regs, 6-13 are flags*/
-    uint8_t* regs[] = {&a, &x, &y, &sp}, i, v, bit;
+    uint8_t *regs[] = {&a, &x, &y, &sp}, i, bit;
+    uint16_t v;
     char *p, *q;
-    p = strtok(NULL, " ");
+    p = strtok(NULL, " \t");
     if (!p) {
         puts("Missing register/flag, expected one of a,x,y,sp,pc or n,v,b,d,i,z,c");
         return;
@@ -494,17 +514,13 @@ void cmd_set() {
         puts("Unknown register/flag, expected one of a,x,y,sp,pc or n,v,b,d,i,z,c");
         return;
     }
-    i = q-vars;
-    p = strtok(NULL, " ");
-    if (!p) {
-        puts("Missing value in set");
-        return;
-    }
-    v = strtol(p, NULL, 16);
+    i = q - vars;
+    p = strtok(NULL, " \t");
+    if (E_OK != _str2val(p, &v, -1, "value")) return;
 
     if (i < 4) {
         *(regs[i]) = v;
-    } else if (i==4) { /* PC is not a uint8_t */
+    } else if (i==4) { /* PC is a special case */
         pc = v;
     } else {
         bit = 1 << (13-i);
@@ -516,33 +532,37 @@ void cmd_set() {
     }
 }
 
-void cmd_store() {
-    uint16_t start, end, addr;
-    uint8_t val;
-    char *p, *q;
+void cmd_fill() {
+    uint16_t start, end, addr, val;
+    int endl;
+    char *p;
 
-    if (0 != parse_range(&start, &end, pc, 1)) return;
+    if (0 != parse_range(&start, &end, -1, 1)) return;
 
-    addr = start;
     org = start;
-    while((p = strtok(NULL, " "))) {
-        val = strtol(p, &q, 16);
-        if (q==p) {
-            printf("Failed to parse value '%s'\n", p);
-            break;
-        }
-        memory[addr++] = val;
+
+    endl = end < start ? 0x10000 : end;
+    if (start == end) {
+        puts("Empty range, nothing to fill");
+        return;
     }
-    if (addr == start) { /* default to zero fill */
+    addr = start;
+    while((p = strtok(NULL, " \t"))) {
+        if (E_OK != _str2val(p, &val, -1, "value")) return;
+        memory[addr++] = (uint8_t)val;
+    }
+    /* with no values, default to zero fill */
+    if (addr == start) {
         memory[addr++] = 0;
     }
-    while (addr < end) {
+    /* repeat the pattern until we've filled the range */
+    while (addr < endl) {
         memory[addr++] = memory[start++];
     }
 }
 
 void cmd_label() {
-    const char *lbl = strtok(NULL, " ");
+    const char *lbl = strtok(NULL, " \t");
     uint16_t addr;
 
     if (
@@ -558,19 +578,19 @@ void cmd_label() {
 }
 
 void cmd_unlabel() {
-    const char *p = strtok(NULL, " ");
+    const char *p = strtok(NULL, " \t");
     if(!p) puts("Missing label name or address");
     else del_labels(p);
 }
 
 void cmd_blockfile() {
-    const char* p = strtok(NULL, " ");
+    const char* p = strtok(NULL, " \t");
     if(!p) puts("Missing block file name");
     else io_blkfile(p);
 }
 
 void cmd_load() {
-    const char* fname = strtok(NULL, " ");
+    const char* fname = strtok(NULL, " \t");
     uint16_t addr;
 
     if (!fname) {
@@ -585,7 +605,7 @@ void cmd_load() {
 
 void cmd_save() {
     uint16_t start, end;
-    const char* fname = strtok(NULL, " ");
+    const char* fname = strtok(NULL, " \t");
 
     if (!fname) {
         puts("Missing file name");
@@ -593,7 +613,7 @@ void cmd_save() {
     }
     if (0 != parse_range(&start, &end, 0, 0)) return;
 
-    if (start == end) end = 0xffff;
+    if (start == end) end = 0;
     (void)save_memory(fname, start, end);
     org = start;
 }
@@ -614,14 +634,14 @@ void cmd_help() {
     puts(
         "\n"
         "Use ctrl-C to interrupt run or continue, type q or quit to exit.\n"
-        "Commands will auto-complete from their initial characters.  For example\n"
-        "'d' becomes 'disassemble' while 'de' becomes 'delete'.  Tab completion is available\n"
-        "along with command history using the up and down arrows.\n"
+        "Commands auto-complete from their initial characters in the order above.\n"
+        "For example 'd' means 'disassemble' while 'de' becomes 'delete'.\n"
+        "Tab completion and command history (up/down) is also available.\n"
         "Repeat commands like step, next, disassemble or memory by just hitting enter.\n"
-        "The monitor maintains a current address so repeating (say) mem advances through memory.\n"
+        "The monitor keeps a current address so repeating (say) mem advances through memory.\n"
         "Write all addresses and values in hex with no prefix, e.g. 123f.\n"
-        "Labels can substituted for any address, including the special 'pc'.\n"
-        "Ranges are written as start:end or start/offset with no spaces, e.g. 1234:1268, 1234/10, /20.\n"
+        "Case senstive labels (or the special 'pc') can be used in place of any address.\n"
+        "Write ranges as start:end or start/offset, e.g. 1234:1268, 1234/10, 1234, /20, :1234.\n"
     );
 }
 
@@ -638,7 +658,7 @@ Command _cmds[] = {
     { "break",  "[range] r|w|a|x - trigger break on read, write, any access or execute (default)", 0, cmd_break },
     { "delete",  "[range] - remove all breakpoints in range (default all)", 0, cmd_delete },
     { "set", "{a|x|y|sp|pc|n|v|d|i|z|c} value - modify a register or flag", 0, cmd_set },
-    { "store", "range value ... - set memory contents in range to value(s)", 0, cmd_store },
+    { "fill", "range value ... - set memory contents in range to value(s)", 0, cmd_fill },
     { "label", "name addr - add a symbolic name for addr", 0, cmd_label },
     { "unlabel", "name|addr - remove label by name or addr", 0, cmd_unlabel },
 
@@ -655,12 +675,19 @@ Command _cmds[] = {
 Command *_repeat_cmd = NULL;
 
 void parse_cmd(char *line) {
-    char* p = strtok(line, " ");
+    char* p;
     Command *cmd;
     int i;
 
+    /* strip comments starting with ; or # */
+    p = strpbrk(line, ";#");
+    if (p) *p = 0;
+    p = strtok(line, " \t");
+    if (!p) return;
+
     for(i=0; i<n_cmds; i++) {
-        if(!strncmp(p, _cmds[i].name, strlen(p))) {
+        /* check for case insenstive match */
+        if(!strncasecmp(p, _cmds[i].name, strlen(p))) {
             cmd = _cmds+i;
             _repeat_cmd = cmd->repeatable ? cmd: NULL;
             cmd->handler();
@@ -684,7 +711,7 @@ void completion(const char *buf, linenoiseCompletions *lc, void *user_data) {
 
 void monitor_init(const char * labelfile) {
     FILE *f;
-    char buf[128], *s, *end;
+    char buf[128], *s;
     const char *label;
     uint16_t addr;
     int fail=0;
@@ -695,20 +722,18 @@ void monitor_init(const char * labelfile) {
     if (labelfile) {
         f = fopen(labelfile, "r");
         if (!f) {
-            printf("Couldn't read labels from %s\n", labelfile);
+            printf("Can't read labels from %s\n", labelfile);
             return;
         }
         while (fgets(buf, sizeof(buf), f) > 0) {
             label = strtok(buf, "\t =");
             s = strtok(NULL, "\t =\n");
-            end = 0;
             /*
                 tailored to 64tass --labels output with 'symbol\t=\t$1234
                 enumerated constants are emitted in similar format, eg. with two digits
                 but we want to ignore those
             */
-            if (s && s[0] == '$' && strlen(s) == 5) addr = strtol(s+1, &end, 16);
-            if (s && end > s+1) {
+            if (s && s[0] == '$' && strlen(s) == 5 && (E_OK == _str2val(s+1, &addr, -1, "address"))) {
                 add_label(label, addr);
             } else {
                 fail++;

@@ -175,7 +175,7 @@ Continue again after the read breakpoint to land at `xt_cold`:
 You can `step` instruction by instruction, or use `next` to step while treating
 `jsr ... rts` as one step.  You can `call` a subroutine and return
 to the current `pc` on completion, or just `run` from an arbitrary address or label.
-Other useful commands are `store` to change the contents of memory or `set`
+Other useful commands are `fill` to change the contents of memory or `set`
 to change a register or flag value.  Use `?` to see all available commands.
 
 When the simulation is running past a breakpoint, type `ctrl-C` to return to the prompt.

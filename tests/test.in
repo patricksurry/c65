@@ -1,0 +1,34 @@
+; a few simple tests based on wozmon rom
+disassemble
+DIS                 ; commands are case insensitve
+dis RESET:NOTCR
+d ESCAPE/6
+d escape/6          ; should fail not interpret as $e/6
+set A 42
+set x 10
+set v 1
+set c false         ; should fail not C=1 (since $f is true...)
+set c 1
+break ffd2          ; PRBYTE + 1
+call PRBYTE
+step
+s 3
+next
+d
+c
+stack
+fill 400/f 12 34
+f 410 1 2 3 4
+f                   ; check for error on empty fill
+mem 400
+mem 400/20
+mem 400:420
+mem :440
+mem /20
+mem fffa/3
+mem fffa/20
+mem
+dis fffa            ; check disassembly stops at end of memory
+dis fffa/5
+d fffa/10
+q

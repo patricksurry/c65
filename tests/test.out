@@ -1,0 +1,122 @@
+c65: reading wozmon.rom to $ff00:$ffff
+c65: PC=ff00 A=00 X=00 Y=00 S=fd FLAGS=<N0 V0 B0 D0 I1 Z0 C0> ticks=0
+Skipped 8 lines from wozmon.sym
+Type ? for help, ctrl-C to interrupt, quit to exit.
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > ; ./c65 -r wozmon.rom -l wozmon.sym < test.in | perl -pe 's/\x1b\[[0-9;]*[mG]//g' > test.out
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > disassemble
+RESET:
+*  ff00  d8        cld  
+   ff01  58        cli  
+   ff02  a0 7f     ldy  #$7f
+   ff04  98        tya  
+NOTCR:
+   ff05  c9 df     cmp  #$df
+   ff07  f0 13     beq  BACKSPACE ; +19
+   ff09  c9 9b     cmp  #$9b
+   ff0b  f0 03     beq  ESCAPE ; +3
+   ff0d  c8        iny  
+   ff0e  10 0f     bpl  NEXTCHAR ; +15
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > DIS                 ; commands are case insensitve
+ESCAPE:
+   ff10  a9 dc     lda  #$dc
+   ff12  20 e4 ff  jsr  ECHO
+GETLINE:
+   ff15  a9 8d     lda  #$8d
+   ff17  20 e4 ff  jsr  ECHO
+   ff1a  a0 01     ldy  #$1
+BACKSPACE:
+   ff1c  88        dey  
+   ff1d  30 f6     bmi  GETLINE ; -10
+NEXTCHAR:
+   ff1f  ad 05 f0  lda  PEEKC
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > dis RESET:NOTCR
+RESET:
+*  ff00  d8        cld  
+   ff01  58        cli  
+   ff02  a0 7f     ldy  #$7f
+   ff04  98        tya  
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > d ESCAPE/6
+ESCAPE:
+   ff10  a9 dc     lda  #$dc
+   ff12  20 e4 ff  jsr  ECHO
+GETLINE:
+   ff15  a9 8d     lda  #$8d
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > d escape/6          ; should fail not interpret as $e/6
+Invalid address 'escape'
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > set A 42
+PC ff00  nv-bdIzc  A 42 X 00 Y 00 SP fd > set x 10
+PC ff00  nv-bdIzc  A 42 X 10 Y 00 SP fd > set v 1
+PC ff00  nV-bdIzc  A 42 X 10 Y 00 SP fd > set c false         ; should fail not C=1 (since $f is true...)
+Invalid value 'false'
+PC ff00  nV-bdIzc  A 42 X 10 Y 00 SP fd > set c 1
+PC ff00  nV-bdIzC  A 42 X 10 Y 00 SP fd > break ffd2          ; PRBYTE + 1
+PC ff00  nV-bdIzC  A 42 X 10 Y 00 SP fd > call PRBYTE
+PC ffd2  nV-bdIzC  A 42 X 10 Y 00 SP fa > step
+*B ffd2  4a        lsr  a
+PC ffd3  nV-bdIzc  A 21 X 10 Y 00 SP fa > s 3
+*  ffd3  4a        lsr  a
+...
+PC ffd6  nV-bdIzc  A 04 X 10 Y 00 SP fa > next
+*  ffd6  20 da ff  jsr  PRHEX
+4PC ffd9  NV-bdIzC  A b4 X 10 Y 00 SP fa > d
+*  ffd9  68        pla  
+PRHEX:
+   ffda  29 0f     and  #$f
+   ffdc  09 b0     ora  #$b0
+   ffde  c9 ba     cmp  #$ba
+   ffe0  90 02     bcc  ECHO ; +2
+   ffe2  69 06     adc  #$6
+ECHO:
+   ffe4  48        pha  
+   ffe5  29 7f     and  #$7f
+   ffe7  c9 0d     cmp  #$d
+PC ffd9  NV-bdIzC  A b4 X 10 Y 00 SP fa > c
+2PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > stack
+01f0                                             00 00  |              ..|
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > fill 400/f 12 34
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > f 410 1 2 3 4
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > f                   ; check for error on empty fill
+Missing range
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > mem 400
+0400  12 34 12 34 12 34 12 34  12 34 12 34 12 34 12 00  |.4.4.4.4.4.4.4..|
+0410  01 02 03 04 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0420  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0430  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > mem 400/20
+0400  12 34 12 34 12 34 12 34  12 34 12 34 12 34 12 00  |.4.4.4.4.4.4.4..|
+0410  01 02 03 04 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > mem 400:420
+0400  12 34 12 34 12 34 12 34  12 34 12 34 12 34 12 00  |.4.4.4.4.4.4.4..|
+0410  01 02 03 04 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > mem :440
+0420  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0430  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > mem /20
+0440  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0450  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > mem fffa/3
+fff0                                 00 00 00           |          ...   |
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > mem fffa/20
+fff0                                 00 00 00 ff 00 00  |          ......|
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > mem
+0010                                 00 00 00 00 00 00  |          ......|
+0020  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0030  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0040  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0050  00 00 00 00 00 00 00 00  00 00                    |..........      |
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > dis fffa            ; check disassembly stops at end of memory
+   fffa  00        brk  
+   fffb  00        brk  
+   fffc  00        brk  
+   fffd  ff 00 00  bbs7 $00,$0000  ; +0
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > dis fffa/5
+   fffa  00        brk  
+   fffb  00        brk  
+   fffc  00        brk  
+   fffd  ff 00 00  bbs7 $00,$0000  ; +0
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > d fffa/10
+   fffa  00        brk  
+   fffb  00        brk  
+   fffc  00        brk  
+   fffd  ff 00 00  bbs7 $00,$0000  ; +0
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > q
