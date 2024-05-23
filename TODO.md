@@ -24,9 +24,3 @@ TODO
   fwrite(writes, sizeof(int), 65536, fout);
   fclose(fout);
 
-- could add command to show current cycles, and/or set/reset a cycle limit.  this used to be a command-line option:
-
-  long max_ticks = -1;
-    case 't':
-      max_ticks = strtol(optarg, NULL, 0);
-      break;

@@ -123,4 +123,34 @@ PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > d fffa/10
    fffb  00        brk  
    fffc  00        brk  
    fffd  ff 00 00  bbs7 $00,$0000  ; +0
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > ; test dereference of name and value
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > f 20 34 12
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > f 34 00 ff
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > f 1234 1 2 3 4
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > m *20
+0030              00 ff 00 00  00 00 00 00 00 00 00 00  |    ............|
+0040  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0050  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0060  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0070  00 00 00 00                                       |....            |
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > label ptr 20
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > m @ptr
+1230              01 02 03 04  00 00 00 00 00 00 00 00  |    ............|
+1240  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+1250  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+1260  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+1270  00 00 00 00                                       |....            |
+PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > d @*ptr
+RESET:
+*  ff00  d8        cld  
+   ff01  58        cli  
+   ff02  a0 7f     ldy  #$7f
+   ff04  98        tya  
+NOTCR:
+   ff05  c9 df     cmp  #$df
+   ff07  f0 13     beq  BACKSPACE ; +19
+   ff09  c9 9b     cmp  #$9b
+   ff0b  f0 03     beq  ESCAPE ; +3
+   ff0d  c8        iny  
+   ff0e  10 0f     bpl  NEXTCHAR ; +15
 PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > q

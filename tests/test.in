@@ -32,4 +32,12 @@ mem
 dis fffa            ; check disassembly stops at end of memory
 dis fffa/5
 d fffa/10
+; test dereference of name and value
+f 20 34 12
+f 34 00 ff
+f 1234 1 2 3 4
+m *20
+label ptr 20
+m @ptr
+d @*ptr
 q

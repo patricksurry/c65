@@ -64,12 +64,24 @@ char* prompt() {
     return _prompt;
 }
 
+uint16_t _dereference(uint16_t addr, char mode) {
+    switch (mode) {
+        case '@':
+            addr = memory[addr] + (memory[addr+1] << 8);
+            break;
+        case '*':
+            addr = memory[addr];
+            break;
+    }
+    return addr;
+}
 
 int _str2val(const char *p, uint16_t *value, int dflt, const char* kind) {
     /* parse word value, with default if >= 0 */
     /* return 0 on success else error code */
 
-    char *q;
+    const char *pfx = p;
+    char *end;
     int v, base=16;
 
     if (!p) {
@@ -81,6 +93,8 @@ int _str2val(const char *p, uint16_t *value, int dflt, const char* kind) {
     } else if (*p == 0x27) {  /* single quote */
         *value = *++p;
     } else {
+        p += strspn(p, "*@");  /* optional dereference prefix */
+
         switch (*p) {
             case '#':
                 base=10; p++; break;
@@ -91,11 +105,12 @@ int _str2val(const char *p, uint16_t *value, int dflt, const char* kind) {
             case '$':
                 base=16; p++; break;
         }
-        v = strtol(p, &q, base);
-        if (*q) {
+        v = strtol(p, &end, base);
+        if (*end) {
             printf("Invalid %s '%s'\n", kind, p);
             return E_PARSE;
         }
+        while (p != pfx) v = _dereference(v, *(--p));
         *value = (uint16_t)v;
     }
     return E_OK;
@@ -180,6 +195,7 @@ int _str2addr(const char *p, uint16_t *addr, int dflt) {
     /* parse addr value (numeric or label), with default if >= 0 */
     /* return 0 on success else error code */
     int v;
+    const char *pfx = p;
 
     if (!p) {
         if (dflt < 0) {
@@ -188,13 +204,16 @@ int _str2addr(const char *p, uint16_t *addr, int dflt) {
         }
         *addr = (uint16_t)dflt;
     } else {
-        /* is it a label? */
+        /* is it a label (ignoring possible dereference prefix)? */
+        p += strspn(p, "*@");
         v = address_for_label(p);
-        if (v < 0) {
+        if (v >= 0) {
+            *addr = v;
+            while (p != pfx) *addr = _dereference(*addr, *(--p));
+        } else {
             /* maybe a plain address? */
-            return _str2val(p, addr, dflt, "address");
+            return _str2val(pfx, addr, dflt, "address");
         }
-        *addr = (uint16_t)v;
     }
     return E_OK;
 }
@@ -544,6 +563,18 @@ void cmd_set() {
     }
 }
 
+void cmd_ticks() {
+    char *p = strtok(NULL, " \t");
+    uint16_t v;
+
+    if (p) {
+        if (0 != _str2val(p, &v, -1, "value")) return;
+        ticks = v;
+    } else {
+        printf("%ld ticks\n", ticks);
+    }
+}
+
 void cmd_fill() {
     uint16_t start, end, addr, val;
     int endl;
@@ -679,6 +710,8 @@ void cmd_help() {
         "The ~ command can be useful to show values in different bases.\n"
         "Case sensitive labels (and the dynamic 'pc') can be used as addresses but not values.\n"
         "Write ranges as start:end or start/offset, e.g. 1234:1268, pc/10, 1234, /20, :label.\n"
+        "Addresses or labels can be deferenced as byte (*) or word (@) values.  For example\n"
+        "dis @*400 lists code at the two byte address stored in zp at the byte found at $400.\n"
     );
 }
 
@@ -695,6 +728,7 @@ Command _cmds[] = {
     { "break",  "[range] r|w|a|x - trigger break on read, write, any access or execute (default)", 0, cmd_break },
     { "delete",  "[range] - remove all breakpoints in range (default all)", 0, cmd_delete },
     { "set", "{a|x|y|sp|pc|n|v|d|i|z|c} value - modify a register or flag", 0, cmd_set },
+    { "ticks", "[value] - query or set the current cycle count", 0, cmd_ticks },
     { "fill", "range value ... - set memory contents in range to value(s)", 0, cmd_fill },
     { "~", "value ... - show each value in binary, octal, hex and decimal", 0, cmd_convert },
     { "label", "name addr - add a symbolic name for addr", 0, cmd_label },
