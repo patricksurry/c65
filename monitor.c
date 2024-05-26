@@ -9,20 +9,11 @@
 #include "fake65c02.h"
 
 #include "monitor.h"
+#include "parse.h"
 #include "c65.h"
 #include "magicio.h"
 #include "linenoise.h"
 
-/*
-Linked list of symbolic address labels.
-We can have multiple labels for a single address,
-but require that label names are unique.
-*/
-typedef struct Label {
-    const char *name;
-    uint16_t addr;
-    struct Label* next;
-} Label;
 
 typedef struct Command {
     const char *name;
@@ -31,11 +22,7 @@ typedef struct Command {
     void (*handler)();
 } Command;
 
-#define E_OK 0
-#define E_MISSING 1
-#define E_PARSE 2
 
-Label *labels = NULL;
 Command _cmds[];
 int org = -1;       /* the current address, reset to PC after each simulation step */
 
@@ -64,219 +51,10 @@ char* prompt() {
     return _prompt;
 }
 
-uint16_t _dereference(uint16_t addr, char mode) {
-    switch (mode) {
-        case '@':
-            addr = memory[addr] + (memory[addr+1] << 8);
-            break;
-        case '*':
-            addr = memory[addr];
-            break;
-    }
-    return addr;
-}
-
-int _str2val(const char *p, uint16_t *value, int dflt, const char* kind) {
-    /* parse word value, with default if >= 0 */
-    /* return 0 on success else error code */
-
-    const char *pfx = p;
-    char *end;
-    int v, base=16;
-
-    if (!p) {
-        if (dflt < 0) {
-            printf("Missing %s\n", kind);
-            return E_MISSING;
-        }
-        *value = (uint16_t)dflt;
-    } else if (*p == 0x27) {  /* single quote */
-        *value = *++p;
-    } else {
-        p += strspn(p, "*@");  /* optional dereference prefix */
-
-        switch (*p) {
-            case '#':
-                base=10; p++; break;
-            case '%':
-                base=2; p++; break;
-            case '&':
-                base=8; p++; break;
-            case '$':
-                base=16; p++; break;
-        }
-        v = strtol(p, &end, base);
-        if (*end) {
-            printf("Invalid %s '%s'\n", kind, p);
-            return E_PARSE;
-        }
-        while (p != pfx) v = _dereference(v, *(--p));
-        *value = (uint16_t)v;
-    }
-    return E_OK;
-}
-
-
-void add_label(const char* name, uint16_t addr) {
-    Label *l, *prv;
-
-    /* first discard any existing label with the same name */
-    for (prv=NULL, l=labels; l; prv=l, l=l->next) {
-        if (0==strcmp(l->name, name)) {
-            if (prv) prv->next = l->next;
-            else labels = l->next;
-            free((void*)l->name);
-            free(l);
-            break;
-        }
-    }
-
-    /* add the new label to head of list*/
-    l = malloc(sizeof(Label));
-    l->name = strdup(name);
-    l->addr = addr;
-    l->next = labels;
-    labels = l;
-}
-
-void del_labels(const char *name_or_addr) {
-    Label *prv, *l;
-    char *q;
-    uint16_t addr;
-
-    /* first check for label with matching name */
-    for (prv=NULL, l=labels; l && 0 != strcmp(l->name, name_or_addr); prv=l, l=l->next) /**/ ;
-    if (l) {
-        if (prv) prv->next = l->next;
-        else labels = l->next;
-        free((void*)l->name);
-        free(l);
-        return;
-    }
-    /* otherwise try parsing as address */
-    if (E_OK != _str2val(name_or_addr, &addr, -1, "address")) return;
-
-    /* remove all labels matching addr */
-    for (prv=NULL, l=labels; l; prv=l, l=l->next) {
-        if(l->addr == addr) {
-            if (prv) prv->next = l->next;
-            else labels = l->next;
-            free((void*)l->name);
-            free(l);
-            l = prv ? prv : labels;
-            q = NULL;
-        }
-    }
-    if (q) printf("No labels for $%.4x\n", addr);
-}
-
-const char* label_for_address(uint16_t addr) {
-    /* return first label name matching address */
-    Label *l;
-
-    for (l=labels; l; l=l->next) {
-        if (l->addr == addr) return l->name;
-    }
-    return NULL;
-}
-
-int address_for_label(const char* name) {
-    Label *l;
-
-    if (0 == strcasecmp(name, "pc")) return pc;
-    for (l=labels; l; l=l->next)
-        if (strcmp(name, l->name) == 0)
-            return l->addr;
-    return -1;
-}
-
-
-int _str2addr(const char *p, uint16_t *addr, int dflt) {
-    /* parse addr value (numeric or label), with default if >= 0 */
-    /* return 0 on success else error code */
-    int v;
-    const char *pfx = p;
-
-    if (!p) {
-        if (dflt < 0) {
-            puts("Missing address");
-            return E_MISSING;
-        }
-        *addr = (uint16_t)dflt;
-    } else {
-        /* is it a label (ignoring possible dereference prefix)? */
-        p += strspn(p, "*@");
-        v = address_for_label(p);
-        if (v >= 0) {
-            *addr = v;
-            while (p != pfx) *addr = _dereference(*addr, *(--p));
-        } else {
-            /* maybe a plain address? */
-            return _str2val(pfx, addr, dflt, "address");
-        }
-    }
-    return E_OK;
-}
-
-int parse_addr(uint16_t *addr, int dflt) {
-    char *p = strtok(NULL, " \t");
-    return _str2addr(p, addr, dflt);
-}
-
-int parse_range(uint16_t* start, uint16_t* end, int dflt_start, int dflt_length) {
-    /* parse a range witten as a single string start:end or start/offset  */
-    char *p, *q, sep;
-    uint16_t offset;
-    int v;
-
-    p = strtok(NULL, " \t");
-    if (!p) {
-        if (dflt_start < 0 || dflt_length < 0) {
-            puts("Missing range");
-            return E_MISSING;
-        }
-        *start = (uint16_t)dflt_start;
-        *end = (uint16_t)(dflt_start + dflt_length);
-    } else {
-        q = strpbrk(p, "/:");
-        sep = q ? *q: 0;
-        if (p == q) {
-            if (dflt_start < 0) {
-                puts("Missing start for range");
-                return E_MISSING;
-            }
-            *start = (uint16_t)dflt_start;
-        } else {
-            if (q) *q = 0;   // terminate p so we can parse addr
-            v = _str2addr(p, start, dflt_start);
-            if (v!=0) return v;
-        }
-        switch (sep) {
-            case ':':
-                v =  _str2addr(++q, end, -1);
-                if (v!=0) return v;
-                break;
-            case '/':
-                v = _str2val(++q, &offset, -1, "offset");
-                if (v != E_OK) return v;
-                *end = *start + offset;
-                break;
-            default:
-                /* only start address was given */
-                if (dflt_length < 0) {
-                    puts("Missing :end or /offset for range");
-                    return E_MISSING;
-                }
-                *end = *start + (uint16_t)dflt_length;
-        }
-    }
-    return E_OK;
-}
-
 char* _fmt_addr(char *buf, uint16_t addr, int len) {
-    const char *label = label_for_address(addr);
-    if (label) {
-        sprintf(buf, "%.16s", label);
+    const Symbol *sym = get_next_symbol_by_value(NULL, addr);
+    if (sym) {
+        sprintf(buf, "%.16s", sym->name);
     } else {
         sprintf(buf, "$%.*x", len, addr);
     }
@@ -288,7 +66,7 @@ uint16_t disasm(uint16_t start, uint16_t end) {
     int8_t offset;
     char line[80], buf[32], *p;
     const char *fmt;
-    Label *l;
+    const Symbol *sym;
     const int n_fmt = strlen(TXT_LO);
     int addr, endl = end < start ? 0x10000 : end;
 
@@ -301,8 +79,12 @@ uint16_t disasm(uint16_t start, uint16_t end) {
     */
     for (addr = start; addr < endl; /**/){
         /* show any labels for this address */
-        for (l=labels; l; l=l->next)
-            if (l->addr == addr) printf("%s:\n", l->name);
+        sym = NULL;
+        for(;;) {
+            sym = get_next_symbol_by_value(sym, addr);
+            if (!sym) break;
+            printf("%s:\n", sym->name);
+        }
 
         /* clear line and show addresss with break and PC info */
         memset(line, ' ', sizeof(line));
@@ -354,7 +136,6 @@ uint16_t disasm(uint16_t start, uint16_t end) {
     return addr;
 }
 
-
 void dump(uint16_t start, uint16_t end) {
     /*
     0         1         2         3         4         5         6         7
@@ -365,6 +146,7 @@ void dump(uint16_t start, uint16_t end) {
     char line[256], chrs[16], *p;
     uint8_t c, v;
 
+    puts("       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef");
     while(addr < endl) {
         memset(chrs, ' ', 16);
         p = line;
@@ -403,28 +185,27 @@ void dump(uint16_t start, uint16_t end) {
 
 void cmd_go() {
     /* run indefinitely from optional addr or PC*/
-    if(0 == parse_addr(&pc, pc)) {
-        step_mode = STEP_RUN;
-    }
+    if (E_OK != parse_addr(&pc, pc) || E_OK != parse_end()) return;
+
+    step_mode = STEP_RUN;
 }
 
 
 void cmd_continue() {
     /* run imdefinitely, optionally to one-time breakpoint */
     uint16_t addr;
-    if(0 == parse_addr(&addr, pc)) {
-        if (addr != pc) breakpoints[addr] |= BREAK_ONCE;
-        step_mode = STEP_RUN;
-    }
+    if (E_OK != parse_addr(&addr, pc) || E_OK != parse_end()) return;
+
+    if (addr != pc) breakpoints[addr] |= BREAK_ONCE;
+    step_mode = STEP_RUN;
 }
 
 void _cmd_single(int mode) {
-    char *p = strtok(NULL, " \t");
-    uint16_t steps = 1;
-    disasm(pc, pc+1);
+    int v;
+
     step_mode = mode;
-    if (p && (E_OK != _str2val(p, &steps, -1, "steps"))) return;
-    step_target = steps;
+    if (E_OK != parse_int(&v, 1) || E_OK != parse_end()) return;
+    step_target = v;
     if (step_target > 1) puts("...");
 }
 
@@ -441,8 +222,7 @@ void cmd_next() {
 void cmd_call() {
     uint16_t ret = pc, target;
 
-    if (0 != parse_addr(&target, -1))
-        return;
+    if (E_OK != parse_addr(&target, DEFAULT_REQUIRED) || E_OK != parse_end()) return;
 
     /* trigger break once we return from subroutine */
     pc = target;
@@ -457,41 +237,40 @@ void cmd_call() {
     step_mode = STEP_RUN;
 }
 
-
 void cmd_disasm() {
     uint16_t start, end;
 
-    if (0 != parse_range(&start, &end, org, 16)) return;
+    if (E_OK != parse_range(&start, &end, org, 16) || E_OK != parse_end()) return;
 
     org = disasm(start, end);
 }
 
-
 void cmd_memory() {
     uint16_t start, end;
 
-    if (0 != parse_range(&start, &end, org, 64)) return;
+    if (E_OK != parse_range(&start, &end, org, 64) || E_OK != parse_end()) return;
+
     dump(start, end);
     org = end;
 }
 
-
 void cmd_stack() {
+    if (E_OK != parse_end()) return;
+
     dump(sp + 0x101, 0x200);
 }
-
 
 void cmd_break() {
     uint16_t start, end;
     uint8_t f=0;
-    char *p;
     int endl;
+    char *p;
 
-    if (0 != parse_range(&start, &end, pc, 1)) return;
-
+    if (E_OK != parse_range(&start, &end, pc, 1)) return;
     endl = end < start ? 0x10000 : end;
 
-    p = strtok(NULL, " \t");
+    p = parse_delim();
+    if (E_OK != parse_end()) return;
     switch(p ? tolower(*p):'x') {
         case 'r':
             f = BREAK_READ;
@@ -515,72 +294,85 @@ void cmd_break() {
     }
 }
 
-
 void cmd_delete() {
     uint16_t start, end;
     int endl;
 
-    if (0 != parse_range(&start, &end, pc, 1)) return;
+    if (E_OK != parse_range(&start, &end, pc, 1) || E_OK != parse_end()) return;
 
-    endl = end < start ? 0x10000 : end;
+    endl = end <= start ? 0x10000 : end;
 
     for(/**/; start < endl; start++)
         breakpoints[start] = 0;
     org = start;
 }
 
+void cmd_show() {
+    uint16_t start, end;
+    int endl, addr;
+    const Symbol *p;
 
-void cmd_set() {
-    const char *vars = "axysp nv bdizc";    /* 0-4 are regs, 6-13 are flags*/
-    uint8_t *regs[] = {&a, &x, &y, &sp}, i, bit;
-    uint16_t v;
-    char *p, *q;
-    p = strtok(NULL, " \t");
-    if (!p) {
-        puts("Missing register/flag, expected one of a,x,y,sp,pc or n,v,b,d,i,z,c");
-        return;
-    }
-    q = strchr(vars, tolower(*p));
-    if (!q) {
-        puts("Unknown register/flag, expected one of a,x,y,sp,pc or n,v,b,d,i,z,c");
-        return;
-    }
-    i = q - vars;
-    p = strtok(NULL, " \t");
-    if (E_OK != _str2val(p, &v, -1, "value")) return;
+    if (E_OK != parse_range(&start, &end, 0, 0) || E_OK != parse_end()) return;
 
-    if (i < 4) {
-        *(regs[i]) = v;
-    } else if (i==4) { /* PC is a special case */
-        pc = v;
-    } else {
-        bit = 1 << (13-i);
-        if (v) {
-            status |= bit;
-        } else {
-            status &= 255 - bit;
+    printf("show %d %d\n", start, end);
+    endl = end <= start ? 0x10000 : end;
+    puts("E(x)ecution breakpoints:");
+    for (addr=start; addr < endl; addr++) {
+        if (breakpoints[addr] & BREAK_PC) {
+            p = get_next_symbol_by_value(NULL, addr);
+            printf("%.4x  %s\n", addr, p ? p->name : "");
+        }
+    }
+    puts("Memory (r)ead breakpoints:");
+    for (addr=start; addr < endl; addr++) {
+        if (breakpoints[addr] & BREAK_READ) {
+            printf("%.4x", addr);
+            for (start=addr; breakpoints[addr] & BREAK_READ; addr++) /**/ ;
+            if (--addr != start) printf(".%.4x", addr);
+            puts("");
+        }
+    }
+    puts("Memory (w)rite breakpoints:");
+    for (addr=start; addr < endl; addr++) {
+        if (breakpoints[addr] & BREAK_WRITE) {
+            printf("%.4x", addr);
+            for (start=addr; breakpoints[addr] & BREAK_WRITE; addr++) /**/ ;
+            if (--addr != start) printf(".%.4x", addr);
+            puts("");
         }
     }
 }
 
-void cmd_ticks() {
-    char *p = strtok(NULL, " \t");
-    uint16_t v;
+void cmd_set() {
+    char *name;
+    int v;
+    name = parse_delim();
+    if (!name) {
+        puts("Missing register/flag, expected one of a,x,y,sp,pc or n,v,b,d,i,z,c");
+        return;
+    }
+    if (E_OK != parse_int(&v, DEFAULT_REQUIRED) || E_OK != parse_end()) return;
+    if (E_OK != set_reg_or_flag(name, v))
+        puts("Unknown register/flag, expected one of a,x,y,sp,pc or n,v,b,d,i,z,c");
+}
 
-    if (p) {
-        if (0 != _str2val(p, &v, -1, "value")) return;
+void cmd_ticks() {
+    /* set or show ticks */
+    int v, err;
+
+    if (E_OK == (err = parse_int(&v, DEFAULT_OPTIONAL))) {
         ticks = v;
-    } else {
+    } else if (E_MISSING == err) {
         printf("%ld ticks\n", ticks);
     }
 }
 
 void cmd_fill() {
-    uint16_t start, end, addr, val;
-    int endl;
-    char *p;
+    uint16_t start, end, addr;
+    uint8_t v;
+    int endl, err;
 
-    if (0 != parse_range(&start, &end, -1, 1)) return;
+    if (E_OK != parse_range(&start, &end, DEFAULT_REQUIRED, 1)) return;
 
     org = start;
 
@@ -590,95 +382,110 @@ void cmd_fill() {
         return;
     }
     addr = start;
-    while((p = strtok(NULL, " \t"))) {
-        if (E_OK != _str2val(p, &val, -1, "value")) return;
-        memory[addr++] = (uint8_t)val;
+
+    if (E_OK != parse_byte(&v, 0)) return;
+    memory[addr++] = v;
+    for(;;) {
+        err = parse_byte(&v, DEFAULT_OPTIONAL);
+        if (err == E_MISSING) break;
+        if (err != E_OK) return;
+        memory[addr++] = v;
     }
-    /* with no values, default to zero fill */
-    if (addr == start) {
-        memory[addr++] = 0;
-    }
+
     /* repeat the pattern until we've filled the range */
     while (addr < endl) {
         memory[addr++] = memory[start++];
     }
 }
 
-const char* bitstr(uint16_t v) {
-    char buf[17], *p;
-    for(p=buf+15; p>=buf; p--, v >>= 1)
-        *p = v & 1 ? '1': '0';
-    buf[16] = 0;
-    for(p=buf; *p == '0'; p++) /**/ ;
+static char _bits[33];
+const char* bitstr(int v) {
+    char *p;
+    for(p=_bits+31; p>=_bits; p--, v >>= 1)
+        *p = (v & 1) ? '1': '0';
+    _bits[32] = 0;
+    for(p=_bits; (*p == '0') && *(p+1); p++) /**/ ;
     return p;
 }
 
 void cmd_convert() {
-    char *p;
-    int n=0;
-    uint16_t val;
+    /* display one or more expression results in multiple bases */
+    int v, err, n;
 
-    while((p = strtok(NULL, " \t"))) {
-        n++;
-        if (E_OK != _str2val(p, &val, -1, "value")) return;
-        printf("%s\t$%x  #%d  &%o  %%%s", p, val, val, val, bitstr(val));
-        if (32 <= val && val < 127) printf("  '%c", val);
+    for(n=0;;n++) {
+        err = parse_int(&v, DEFAULT_OPTIONAL);
+        if (err == E_MISSING) break;
+        if (E_OK != err) return;
+        printf(
+            "%.*s\t:=  $%x  #%d  %%%s",
+            parsed_length(), parsed_str(), v, v, bitstr(v)
+        );
+        if (32 <= v && v < 127)
+            printf("  '%c", v);
         puts("");
     }
-    if(!n) puts("No values to convert");
+    if (!n) puts("No values to convert");
 }
 
 void cmd_label() {
-    const char *lbl = strtok(NULL, " \t");
+    const char *lbl;
     uint16_t addr;
 
+    lbl = parse_delim();
     if (
         !lbl
         || isdigit(lbl[0])
-        || strlen(lbl) != strspn(lbl, "_@0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+        || strlen(lbl) != strspn(lbl, "_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
     ) {
         puts("Invalid label");
         return;
     }
-    if (0 == parse_addr(&addr, pc))
-        add_label(lbl, addr);
+    if (E_OK != parse_addr(&addr, pc) || E_OK != parse_end()) return;
+
+    add_symbol(lbl, addr);
 }
 
 void cmd_unlabel() {
-    const char *p = strtok(NULL, " \t");
-    if(!p) puts("Missing label name or address");
-    else del_labels(p);
+    uint16_t addr;
+
+    if (E_OK != parse_addr(&addr, DEFAULT_REQUIRED) || E_OK != parse_end()) return;
+
+    if (0 == remove_symbols_by_value(addr))
+        printf("No labels for $%.4x\n", addr);
+
 }
 
 void cmd_blockfile() {
-    const char* p = strtok(NULL, " \t");
+    char *p = parse_delim();
+    if (E_OK != parse_end()) return;
+
     if(!p) puts("Missing block file name");
     else io_blkfile(p);
 }
 
 void cmd_load() {
-    const char* fname = strtok(NULL, " \t");
+    const char* fname = parse_delim();
     uint16_t addr;
 
     if (!fname) {
         puts("Missing rom file name");
         return;
     }
-    if (0 == parse_addr(&addr, -1)) {
-        (void)load_memory(fname, addr);
-        org = addr;
-    }
+    if (E_OK != parse_addr(&addr, DEFAULT_REQUIRED) || E_OK != parse_end()) return;
+
+    (void)load_memory(fname, addr);
+    org = addr;
 }
 
 void cmd_save() {
+    const char* fname = parse_delim();
     uint16_t start, end;
-    const char* fname = strtok(NULL, " \t");
 
     if (!fname) {
         puts("Missing file name");
         return;
     }
-    if (0 != parse_range(&start, &end, 0, 0)) return;
+    if (E_OK != parse_range(&start, &end, 0, 0) || E_OK != parse_end()) return;
 
     if (start == end) end = 0;
     (void)save_memory(fname, start, end);
@@ -687,6 +494,7 @@ void cmd_save() {
 
 
 void cmd_quit() {
+    if (E_OK != parse_end()) return;
     monitor_exit();
     exit(0);
 }
@@ -705,13 +513,16 @@ void cmd_help() {
         "For example 'd' means 'disassemble' while 'de' becomes 'delete'.\n"
         "Tab completion and command history (up/down) are also available.\n"
         "Enter repeats commands like step, next, dis or mem as they advance through memory.\n"
-        "Values are normally written as hex, e.g. 123f, or with an explicit prefix for\n"
-        "binary (%), octal (&), decimal (#), hex ($) or printable ascii (').\n"
-        "The ~ command can be useful to show values in different bases.\n"
-        "Case sensitive labels (and the dynamic 'pc') can be used as addresses but not values.\n"
-        "Write ranges as start:end or start/offset, e.g. 1234:1268, pc/10, 1234, /20, :label.\n"
-        "Addresses or labels can be deferenced as byte (*) or word (@) values.  For example\n"
-        "dis @*400 lists code at the two byte address stored in zp at the byte found at $400.\n"
+        "Literal values are assumed to be hex, e.g. 123f, unless prefixed as binary (%),\n"
+        "decimal (#), hex ($) or an ascii character ('). Use the ~ command as a calculator\n"
+        "to display values or expression results in all bases. C-style expressions can be used\n"
+        "for most address and value arguments.  Expressions can include (case-sensitive) labels\n"
+        "as well as CPU registers A, X, Y, PC, SP and flags N, V, B, D, I, Z and C.\n"
+        "The usual operators are available, along with * and @ to deference memory by byte or word\n"
+        "and unary < and > to extract least and most significant bytes like most assemblers.\n"
+        "For example >(@(*(pc+1))+x) takes the high byte of an indirect zp address via a PC operand.\n"
+        "Write ranges as start.end or start..offset, e.g. 1234.1268, pc .. 10, 1234, ..20, .label.\n"
+        "Think of the second . as a shortcut: start..offset is the same as start.start+offset\n"
     );
 }
 
@@ -726,7 +537,9 @@ Command _cmds[] = {
     { "memory", "[range] - dump memory contents for range (or current)", 1, cmd_memory },
     { "stack", "- show stack contents, sp+1 through $1ff", 0, cmd_stack },
     { "break",  "[range] r|w|a|x - trigger break on read, write, any access or execute (default)", 0, cmd_break },
-    { "delete",  "[range] - remove all breakpoints in range (default all)", 0, cmd_delete },
+    { "delete",  "[range] - remove all breakpoints in range (default PC)", 0, cmd_delete },
+    { "show", "[range] - show all breakpoints in range (default all)", 0, cmd_show },
+
     { "set", "{a|x|y|sp|pc|n|v|d|i|z|c} value - modify a register or flag", 0, cmd_set },
     { "ticks", "[value] - query or set the current cycle count", 0, cmd_ticks },
     { "fill", "range value ... - set memory contents in range to value(s)", 0, cmd_fill },
@@ -746,7 +559,7 @@ Command _cmds[] = {
 
 Command *_repeat_cmd = NULL;
 
-void parse_cmd(char *line) {
+void do_cmd(char *line) {
     char* p;
     Command *cmd;
     int i;
@@ -754,7 +567,8 @@ void parse_cmd(char *line) {
     /* strip comments starting with ; */
     p = strpbrk(line, ";");
     if (p) *p = 0;
-    p = strtok(line, " \t");
+    parse_start(line);
+    p = parse_delim();
     if (!p) return;
 
     for(i=0; i<n_cmds; i++) {
@@ -785,8 +599,7 @@ void monitor_init(const char * labelfile) {
     FILE *f;
     char buf[128], *s;
     const char *label;
-    uint16_t addr;
-    int fail=0;
+    int fail=0, tmp;
     linenoiseSetCompletionCallback(completion, NULL);
     linenoiseHistorySetMaxLen(256);
     linenoiseHistoryLoad(".c65");
@@ -805,8 +618,8 @@ void monitor_init(const char * labelfile) {
                 enumerated constants are emitted in similar format, eg. with two digits
                 but we want to ignore those
             */
-            if (s && s[0] == '$' && strlen(s) == 5 && (E_OK == _str2val(s+1, &addr, -1, "address"))) {
-                add_label(label, addr);
+            if (s && s[0] == '$' && strlen(s) == 5 && (E_OK == strexpr(s+1, &tmp))) {
+                add_symbol(label, (uint16_t)tmp);
             } else {
                 fail++;
             }
@@ -827,12 +640,17 @@ void monitor_command() {
     if (step_mode != STEP_NONE) {
         org = pc;
         step_mode = STEP_NONE;
+        if (break_flag & (BREAK_READ | BREAK_WRITE)) {
+            printf("%.4x: memory %s\n", rw_brk, break_flag & BREAK_READ ? "read": "write");
+            dump(rw_brk & 0xfff0, rw_brk | 0xf);
+        }
+        disasm(pc, pc+1);
     }
 
     line = linenoise(prompt());
     if(strlen(line)) {
         linenoiseHistoryAdd(line);
-        parse_cmd(line);
+        do_cmd(line);
         free(line);
     } else if (_repeat_cmd) {
         /* empty line can repeat some commands */

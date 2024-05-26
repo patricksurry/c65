@@ -1,5 +1,7 @@
 TODO
 
+- optional case insensitive labels
+
 - feedback from "delete" or "delete xyz" on how many breakpoints were removed (did it do anything?)
 
 - add "show" to summarize active breakpoints with ranges

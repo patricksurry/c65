@@ -19,6 +19,7 @@ extern uint8_t breakpoints[65536];
 
 extern uint16_t pc;
 extern uint8_t a, x, y, sp, status;
+extern uint16_t rw_brk;
 
 extern long ticks;
 extern int break_flag, step_mode, step_target;
@@ -26,6 +27,9 @@ extern int break_flag, step_mode, step_target;
 const char* opname(uint8_t op);
 uint8_t oplen(uint8_t op);
 const char* opfmt(uint8_t op);
+
+int get_reg_or_flag(const char *name);
+int set_reg_or_flag(const char *name, int v);
 
 int load_memory(const char* romfile, int addr);
 int save_memory(const char* romfile, uint16_t start, uint16_t end);

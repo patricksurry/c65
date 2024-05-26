@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <ctype.h>
 
 
 #define FAKE6502_NOT_STATIC 1
@@ -20,6 +21,7 @@ int writes[65536];
 
 long ticks = 0;
 int break_flag = 0, step_mode = STEP_RUN, step_target = -1;
+uint16_t rw_brk;
 
 static uint8_t _opmodes[256] = { 255 };
 
@@ -76,11 +78,10 @@ uint8_t read6502(uint16_t addr) {
   rws[addr] += 1;
   if (breakpoints[addr] & BREAK_READ) {
     break_flag |= BREAK_READ;
-    printf("Break on reading $%.4x\n", addr);
+    rw_brk = addr;
   }
   return memory[addr];
 }
-
 
 void write6502(uint16_t addr, uint8_t val) {
   io_magic_write(addr, val);
@@ -88,11 +89,59 @@ void write6502(uint16_t addr, uint8_t val) {
   writes[addr] += 1;
   if (breakpoints[addr] & BREAK_WRITE) {
     break_flag |= BREAK_WRITE;
-    printf("Break on writing $%.4x\n", addr);
+    rw_brk = addr;
   }
   memory[addr] = val;
 }
 
+const char *_flags = "nv bdizc";
+int get_reg_or_flag(const char *name) {
+    const char *q;
+    /* return register or flag value with case insenstive name */
+    if (0 == strcasecmp(name, "pc")) {
+        return pc;
+    } else if (0 == strcasecmp(name, "a")) {
+        return a;
+    } else if (0 == strcasecmp(name, "x")) {
+        return x;
+    } else if (0 == strcasecmp(name, "y")) {
+        return y;
+    } else if (0 == strcasecmp(name, "sp")) {
+        return sp;
+    } else if (strlen(name) == 1 && (q = strchr(_flags, tolower(name[0])))) {
+        return status & (1 << (7-(q-_flags))) ? 1: 0;
+    }
+    return -1;
+}
+
+int set_reg_or_flag(const char *name, int v) {
+    const char *q;
+    uint8_t bit;
+
+    /* return register or flag value with case insenstive name */
+    if (0 == strcasecmp(name, "pc")) {
+        pc = v;
+        return 0;
+    } else if (0 == strcasecmp(name, "a")) {
+        a = v;
+        return 0;
+    } else if (0 == strcasecmp(name, "x")) {
+        x = v;
+        return 0;
+    } else if (0 == strcasecmp(name, "y")) {
+        y = v;
+        return 0;
+    } else if (0 == strcasecmp(name, "sp")) {
+        sp = v;
+        return 0;
+    } else if (strlen(name) == 1 && (q = strchr(_flags, tolower(name[0])))) {
+        bit = 1 << (7-(q-_flags));
+        if (bit) status |= bit;
+        else status ^= bit;
+        return 0;
+    }
+    return -1;
+}
 
 int load_memory(const char* romfile, int addr) {
   /*

@@ -1,43 +1,49 @@
 ; a few simple tests based on wozmon rom
+quit extraneous     ; trailing text warning
 disassemble
 DIS                 ; commands are case insensitve
-dis RESET:NOTCR
-d ESCAPE/6
-d escape/6          ; should fail not interpret as $e/6
-set A 42
+dis RESET . NOTCR
+d ESCAPE .. 6
+d escape .. 6       ; error: labels are case sensitive (and not $e .. 6)
+set A 42            ; reserved labels are case insensitive
 set x 10
 set v 1
-set c false         ; should fail not C=1 (since $f is true...)
+set c false         ; error, not C=$fa
 set c 1
-break ffd2          ; PRBYTE + 1
+break PRBYTE + 1
 call PRBYTE
 step
 s 3
 next
 d
+b $100.1ff r       ; break on any stack read
 c
 stack
-~ 32 #50 &12
-fill 400/f 12 34
+; test some simple expressions
+~ 32 #50 1+3*2 (1+3)*2
+~ (<(1 ? -1 : 2)) (<(0 ? 2 : -1)) 1234 & $ff
+~ 3 < 4  3 > 4  3 < 3 3 <= 3 4 >= 3
+~ RESET = 3 3==3 RESET <> 3  3!=3
+fill 400..f 12 34
 f 410 30 $31 '2 #51 %110100 35
-f                   ; check for error on empty fill
+f                   ; error: empty fill
 mem 400
-mem 400/20
-mem 400:420
-mem :440
-mem /20
-mem fffa/3
-mem fffa/20
+mem 400..20
+mem 400 . 420
+mem . 440
+mem .. 20
+mem fffa..3
+mem fffa..20
 mem
 dis fffa            ; check disassembly stops at end of memory
-dis fffa/5
-d fffa/10
+dis fffa..5
+d fffa .. 10
 ; test dereference of name and value
-f 20 34 12
-f 34 00 ff
+f 20 34 12          ; $20 contains byte 34, word 1234
+f 34 00 ff          ; $34 contains word $ff00
 f 1234 1 2 3 4
-m *20
+m *20               ; dereference zp byte
 label ptr 20
-m @ptr
-d @*ptr
+m @ptr              ; derefernce zp word (20 -> 1234)
+d @*ptr             ; dereference indirect zp word (20 -> 34 -> $ff00)
 q
