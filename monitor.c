@@ -263,7 +263,7 @@ void cmd_stack() {
 void cmd_break() {
     uint16_t start, end;
     uint8_t f=0;
-    int endl;
+    int endl, addr;
     char *p;
 
     if (E_OK != parse_range(&start, &end, pc, 1)) return;
@@ -286,8 +286,8 @@ void cmd_break() {
             break;
     }
     if (f) {
-        for(/**/; start < endl; start++)
-            breakpoints[start] |= f;
+        for(addr=start; addr < endl; addr++)
+            breakpoints[addr] |= f;
         org = start;
     } else {
         printf("Unknown breakpoint type '%c'\n", *p);
@@ -296,15 +296,19 @@ void cmd_break() {
 
 void cmd_delete() {
     uint16_t start, end;
-    int endl;
+    int addr, endl, n;
 
     if (E_OK != parse_range(&start, &end, pc, 1) || E_OK != parse_end()) return;
 
     endl = end <= start ? 0x10000 : end;
 
-    for(/**/; start < endl; start++)
-        breakpoints[start] = 0;
+    for(n=0, addr=start; addr < endl; addr++)
+        if (breakpoints[addr]) {
+            breakpoints[addr] = 0;
+            n++;
+        }
     org = start;
+    printf("Removed %d breakpoint%s.\n", n, n==1?"":"s");
 }
 
 void cmd_show() {
@@ -368,9 +372,9 @@ void cmd_ticks() {
 }
 
 void cmd_fill() {
-    uint16_t start, end, addr;
+    uint16_t start, end;
     uint8_t v;
-    int endl, err;
+    int addr, endl, err;
 
     if (E_OK != parse_range(&start, &end, DEFAULT_REQUIRED, 1)) return;
 
@@ -492,6 +496,14 @@ void cmd_save() {
     org = start;
 }
 
+void cmd_heatmap() {
+    const char *fname = parse_delim();
+    if (!fname) {
+        puts("Missing file name");
+        return;
+    }
+    (void)save_heatmap(fname);
+}
 
 void cmd_quit() {
     if (E_OK != parse_end()) return;
@@ -549,6 +561,7 @@ Command _cmds[] = {
 
     { "load", "romfile addr - read binary file to memory", 0, cmd_load },
     { "save", "romfile [range] - write memory to file (default full dump)", 0, cmd_save },
+    { "heatmap", "mapfile - dump memory usage to files mapfile-[aw].dat", 0, cmd_heatmap },
     { "blockfile", "[blockfile] - use binary file for block storage, empty to disable", 0, cmd_blockfile },
     { "quit", "- leave c65", 0, cmd_quit },
     { "help", "or ? - show this help", 0, cmd_help },

@@ -16,8 +16,8 @@
 
 uint8_t memory[65536];
 uint8_t breakpoints[65536];
-int rws[65536];
-int writes[65536];
+int heatrws[65536];
+int heatws[65536];
 
 long ticks = 0;
 int break_flag = 0, step_mode = STEP_RUN, step_target = -1;
@@ -75,7 +75,7 @@ const char* opfmt(uint8_t op) {
 
 uint8_t read6502(uint16_t addr) {
   io_magic_read(addr);
-  rws[addr] += 1;
+  heatrws[addr] += 1;
   if (breakpoints[addr] & BREAK_READ) {
     break_flag |= BREAK_READ;
     rw_brk = addr;
@@ -85,8 +85,8 @@ uint8_t read6502(uint16_t addr) {
 
 void write6502(uint16_t addr, uint8_t val) {
   io_magic_write(addr, val);
-  rws[addr] += 1;
-  writes[addr] += 1;
+  heatrws[addr] += 1;
+  heatws[addr] += 1;
   if (breakpoints[addr] & BREAK_WRITE) {
     break_flag |= BREAK_WRITE;
     rw_brk = addr;
@@ -171,11 +171,37 @@ int save_memory(const char* romfile, uint16_t start, uint16_t end) {
   FILE *fout;
   fout = fopen(romfile, "wb");
   if (!fout) {
-    fprintf(stderr, "File not found: %s\n", romfile);
+    fprintf(stderr, "Error writing %s\n", romfile);
     return -1;
   }
   printf("c65: writing $%04x:$%04x to %s", start, end, romfile);
   fwrite(memory+start, 1, (end < start ? 0x10000 : end) - start + 1, fout);
+  fclose(fout);
+  return 0;
+}
+
+char _fname[1024];
+int save_heatmap(const char* heatfile) {
+  FILE *fout;
+
+  sprintf(_fname, "%s%s", heatfile, "-a.dat");
+  fout = fopen(_fname, "wb");
+  if (!fout) {
+    fprintf(stderr, "Error writing %s\n", _fname);
+    return -1;
+  }
+  printf("c65: writing heatmap access counts to %s\n", _fname);
+  fwrite(heatrws, 1, 0x10000, fout);
+  fclose(fout);
+
+  sprintf(_fname, "%s%s", heatfile, "-w.dat");
+  fout = fopen(_fname, "wb");
+  if (!fout) {
+    fprintf(stderr, "Error writing %s\n", _fname);
+    return -1;
+  }
+  printf("c65: writing heatmap write counts to %s\n", _fname);
+  fwrite(heatws, 1, 0x10000, fout);
   fclose(fout);
   return 0;
 }
