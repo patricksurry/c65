@@ -17,6 +17,7 @@ s 3
 next
 d
 b $100.1ff r       ; break on any stack read
+show
 c
 stack
 ; test some simple expressions

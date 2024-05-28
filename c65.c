@@ -16,10 +16,11 @@
 
 uint8_t memory[65536];
 uint8_t breakpoints[65536];
-int heatrws[65536];
-int heatws[65536];
+uint64_t heatrs[65536];
+uint64_t heatws[65536];
 
-long ticks = 0;
+uint64_t ticks = 0;
+
 int break_flag = 0, step_mode = STEP_RUN, step_target = -1;
 uint16_t rw_brk;
 
@@ -75,7 +76,7 @@ const char* opfmt(uint8_t op) {
 
 uint8_t read6502(uint16_t addr) {
   io_magic_read(addr);
-  heatrws[addr] += 1;
+  heatrs[addr] += 1;
   if (breakpoints[addr] & BREAK_READ) {
     break_flag |= BREAK_READ;
     rw_brk = addr;
@@ -85,7 +86,6 @@ uint8_t read6502(uint16_t addr) {
 
 void write6502(uint16_t addr, uint8_t val) {
   io_magic_write(addr, val);
-  heatrws[addr] += 1;
   heatws[addr] += 1;
   if (breakpoints[addr] & BREAK_WRITE) {
     break_flag |= BREAK_WRITE;
@@ -184,14 +184,14 @@ char _fname[1024];
 int save_heatmap(const char* heatfile) {
   FILE *fout;
 
-  sprintf(_fname, "%s%s", heatfile, "-a.dat");
+  sprintf(_fname, "%s%s", heatfile, "-r.dat");
   fout = fopen(_fname, "wb");
   if (!fout) {
     fprintf(stderr, "Error writing %s\n", _fname);
     return -1;
   }
-  printf("c65: writing heatmap access counts to %s\n", _fname);
-  fwrite(heatrws, 1, 0x10000, fout);
+  printf("c65: writing heatmap read counts to %s\n", _fname);
+  fwrite(heatrs, sizeof(uint64_t), 0x10000, fout);
   fclose(fout);
 
   sprintf(_fname, "%s%s", heatfile, "-w.dat");
@@ -201,7 +201,7 @@ int save_heatmap(const char* heatfile) {
     return -1;
   }
   printf("c65: writing heatmap write counts to %s\n", _fname);
-  fwrite(heatws, 1, 0x10000, fout);
+  fwrite(heatws, sizeof(uint64_t), 0x10000, fout);
   fclose(fout);
   return 0;
 }
@@ -209,7 +209,7 @@ int save_heatmap(const char* heatfile) {
 void show_cpu() {
   printf(
       "c65: PC=%04x A=%02x X=%02x Y=%02x S=%02x FLAGS=<N%d V%d B%d D%d I%d Z%d "
-      "C%d> ticks=%lu\n",
+      "C%d> ticks=%llu\n",
       pc, a, x, y, sp, status & FLAG_SIGN ? 1 : 0,
       status & FLAG_OVERFLOW ? 1 : 0, status & FLAG_BREAK ? 1 : 0,
       status & FLAG_DECIMAL ? 1 : 0, status & FLAG_INTERRUPT ? 1 : 0,

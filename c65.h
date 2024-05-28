@@ -21,7 +21,9 @@ extern uint16_t pc;
 extern uint8_t a, x, y, sp, status;
 extern uint16_t rw_brk;
 
-extern long ticks;
+extern uint64_t heatrs[65536], heatws[65536];
+
+extern uint64_t ticks;
 extern int break_flag, step_mode, step_target;
 
 const char* opname(uint8_t op);

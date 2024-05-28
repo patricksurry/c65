@@ -51,6 +51,103 @@ char* prompt() {
     return _prompt;
 }
 
+int heat_scale = 0;
+
+int bitlen(uint64_t v) {
+    int bits;
+    for (bits=0; v != 0; bits++, v >>=1) /**/ ;
+    return bits;
+}
+
+static char _heatbuf[16];
+
+char* heatstr(uint64_t d) {
+    const char heat_ascii[] = " .:+*%&@";
+    const int heat_colors[] = {100, 104, 106, 102, 103, 101, 105, 107};
+
+    int c;
+    if (heat_scale == 0) sprintf(_heatbuf, " ");
+    else {
+        if (d == 0) {
+            c = 0;
+        } else {
+            c = 1 + (bitlen(d) - 1) / heat_scale;
+            if (c > 7) c = 7;
+        }
+        sprintf(_heatbuf, "\x1b[%dm%c\x1b[0m", heat_colors[c], heat_ascii[c]);
+    }
+    return _heatbuf;
+}
+
+void heatmap(uint16_t start, uint16_t end, int mode) {
+    uint64_t data[1024], dmax, d;
+    int i, zoom, addr, endl;
+
+    endl = end > start ? end : 0x10000;
+
+    /* figure out a scaling where we can round down start and encompass end.
+       consider only even zoom levels since it makes labeling easier */
+    for(zoom=0; /**/; zoom+=2)
+        if (((start >> zoom) << zoom) + (1024 << zoom) >= endl) break;
+    /* round down the start to a multiple of zoom */
+    start = (start >> zoom) << zoom;
+
+    /* aggregate the data we're after */
+    for(i=0; i<1024; i++)
+        data[i] = 0;
+    for(addr=start; addr<start + (1024 << zoom) & addr < 0x10000; addr++) {
+        i = (addr-start) >> zoom;
+        if (mode & BREAK_READ && data[i] < heatrs[addr]) data[i] = heatrs[addr];
+        if (mode & BREAK_WRITE && data[i] < heatws[addr]) data[i] = heatws[addr];
+    }
+    /*
+    set up a log color scale by picking a number of bits for each bucket
+    we'll assign our eight colors like so:
+
+    bit length is 0 (ie. the value is 0) => color 0
+    bit length 1:k (values 1..2^k-1) => color 1
+    bit length ...:2k => color 2
+    ...
+    bit length ...:7k => color 7
+    */
+    /* first get the largest value for scaling the color ramp */
+    for(dmax=i=0; i<1024; i++)
+        if (data[i] > dmax) dmax = data[i];
+    /* now calculate k by dividing bit length of largest value by 7 and rounding: */
+    heat_scale = (int)(bitlen(dmax)/7.0 + 0.5);
+    if (!heat_scale) heat_scale = 1;        /* want at least one bit per bucket or labels looks silly */
+
+    /* add a header line.  with even zoom levels each row of 64 blocks shares the same labeling */
+    printf("\n     ");
+    for(i=0; i<64; i++) {
+        if (!(i & 0xf)) printf(" ");
+        if (zoom&2) {   /* 0   1   2   3 .... */
+            if (i&3) printf(" ");
+            else printf("%x", i>>2);
+        } else {        /* 012345678... */
+            printf("%x", i&0xf);
+        }
+    }
+    puts("");
+    /* draw the data */
+    for(i=0; i<1024; i++) {
+        addr = start + (i << zoom);
+        if (addr >= endl) break;
+        if (!(i & 0x3f)) printf("%.4x ", addr);
+        if (!(i & 0xf)) printf(" ");
+        printf("%s", heatstr(data[i]));
+        if ((i & 0x3f) == 0x3f) puts("");
+    }
+    /* add a legend*/
+    printf("\n      0 ");
+    for(i=0; i<8; i++) {
+        d = 1 << (i * heat_scale);
+        printf("%s %llx ", heatstr(d-1), d);
+    }
+    printf("(%x byte%s/block)\n\n", 1 << zoom, zoom ? "s": "");
+
+}
+
 char* _fmt_addr(char *buf, uint16_t addr, int len) {
     const Symbol *sym = get_next_symbol_by_value(NULL, addr);
     if (sym) {
@@ -103,9 +200,9 @@ uint16_t disasm(uint16_t start, uint16_t end) {
             p += sprintf(p, "%.2x ", memory[addr+k]);
         *p = ' ';
 
-        /* show the name of the opcode */
+        /* show the name of the opcode, with heatmap */
         p = line + 19 + n_fmt;
-        p += sprintf(p, TXT_N "%.4s ", opname(op));
+        p += sprintf(p, TXT_N "%s %.4s ", heatstr(heatrs[addr]), opname(op));
         addr++;
 
         /* show the addressing mode detail */
@@ -240,7 +337,7 @@ void cmd_call() {
 void cmd_disasm() {
     uint16_t start, end;
 
-    if (E_OK != parse_range(&start, &end, org, 16) || E_OK != parse_end()) return;
+    if (E_OK != parse_range(&start, &end, org, 48) || E_OK != parse_end()) return;
 
     org = disasm(start, end);
 }
@@ -248,7 +345,7 @@ void cmd_disasm() {
 void cmd_memory() {
     uint16_t start, end;
 
-    if (E_OK != parse_range(&start, &end, org, 64) || E_OK != parse_end()) return;
+    if (E_OK != parse_range(&start, &end, org, 256) || E_OK != parse_end()) return;
 
     dump(start, end);
     org = end;
@@ -312,39 +409,56 @@ void cmd_delete() {
 }
 
 void cmd_show() {
-    uint16_t start, end;
-    int endl, addr;
-    const Symbol *p;
+    /* show breakpoints and labels for a range of memory */
+    uint16_t start, end, nmax;
+    int endl, addr, span, n, prv, brk, new;
+    const Symbol *sym;
 
-    if (E_OK != parse_range(&start, &end, 0, 0) || E_OK != parse_end()) return;
+    if (
+        E_OK != parse_range(&start, &end, 0, 0)
+        || E_OK != parse_addr(&nmax, 16)
+        || E_OK != parse_end()
+    ) return;
 
-    printf("show %d %d\n", start, end);
     endl = end <= start ? 0x10000 : end;
-    puts("E(x)ecution breakpoints:");
-    for (addr=start; addr < endl; addr++) {
-        if (breakpoints[addr] & BREAK_PC) {
-            p = get_next_symbol_by_value(NULL, addr);
-            printf("%.4x  %s\n", addr, p ? p->name : "");
-        }
-    }
-    puts("Memory (r)ead breakpoints:");
-    for (addr=start; addr < endl; addr++) {
-        if (breakpoints[addr] & BREAK_READ) {
-            printf("%.4x", addr);
-            for (start=addr; breakpoints[addr] & BREAK_READ; addr++) /**/ ;
-            if (--addr != start) printf(".%.4x", addr);
+    for (prv=n=0, addr=start; addr < endl && n < nmax; prv=brk, addr++) {
+
+        brk = breakpoints[addr] & (BREAK_PC | BREAK_READ | BREAK_WRITE);
+        sym = get_next_symbol_by_value(NULL, addr);
+
+        new = brk & (brk ^ prv);
+
+        if (!sym && !new) continue;
+
+        printf("%.4x", addr);
+        for(/**/; sym; sym = get_next_symbol_by_value(sym, addr))
+            printf("  %s", sym->name);
+        puts("");
+        n++;
+
+        if (new) {   /* did some flags just switch on? */
+            printf("  break");
+            if (new & BREAK_PC) {
+                for(span=addr; span<0x10000 && breakpoints[span] & BREAK_PC; span++) /**/;
+                if (--span != addr) printf("  x %.4x.%.4x", addr, span);
+                else printf("  x %.4x", addr);
+            }
+            if (new & BREAK_READ ) {
+                for(span=addr; span<0x10000 && breakpoints[span] & BREAK_READ; span++) /**/;
+                if (--span != addr) printf("  r %.4x.%.4x", addr, span);
+                else printf("  r %.4x", addr);
+            }
+            if (new & BREAK_WRITE) {
+                for(span=addr; span<0x10000 && breakpoints[span] & BREAK_WRITE; span++) /**/;
+                if (--span != addr) printf("  w %.4x.%.4x", addr, span);
+                else printf("  w %.4x", addr);
+            }
             puts("");
+            n++;
         }
     }
-    puts("Memory (w)rite breakpoints:");
-    for (addr=start; addr < endl; addr++) {
-        if (breakpoints[addr] & BREAK_WRITE) {
-            printf("%.4x", addr);
-            for (start=addr; breakpoints[addr] & BREAK_WRITE; addr++) /**/ ;
-            if (--addr != start) printf(".%.4x", addr);
-            puts("");
-        }
-    }
+    if (n >= nmax) puts("...");
+    else if (n == 0) puts("(no labels or breakpoints found)");
 }
 
 void cmd_set() {
@@ -367,7 +481,7 @@ void cmd_ticks() {
     if (E_OK == (err = parse_int(&v, DEFAULT_OPTIONAL))) {
         ticks = v;
     } else if (E_MISSING == err) {
-        printf("%ld ticks\n", ticks);
+        printf("%llu ticks\n", ticks);
     }
 }
 
@@ -497,12 +611,31 @@ void cmd_save() {
 }
 
 void cmd_heatmap() {
-    const char *fname = parse_delim();
-    if (!fname) {
-        puts("Missing file name");
-        return;
+    uint16_t start, end;
+    int mode = BREAK_READ | BREAK_WRITE;
+    char *p;
+
+    if (E_OK != parse_range(&start, &end, 0, 0)) return;
+
+    p = parse_delim();
+    if (p) {
+        switch(tolower(*p)) {
+            case 'r': mode = BREAK_READ; break;
+            case 'w': mode = BREAK_WRITE; break;
+        }
     }
-    (void)save_heatmap(fname);
+    /* TODO optional enum, then optional save or reset */
+        /*
+        if (0==strcasecmp(p, "save")) {
+            (void)save_heatmap(p);  // specify read/write/all
+            return;
+        } else if (0==strcasecmp(p, "reset")) {
+            // heat_scale = 0;
+            // heatrs, heatws = 0;
+        }
+    */
+    heatmap(start, end, mode);
+
 }
 
 void cmd_quit() {
@@ -550,7 +683,7 @@ Command _cmds[] = {
     { "stack", "- show stack contents, sp+1 through $1ff", 0, cmd_stack },
     { "break",  "[range] r|w|a|x - trigger break on read, write, any access or execute (default)", 0, cmd_break },
     { "delete",  "[range] - remove all breakpoints in range (default PC)", 0, cmd_delete },
-    { "show", "[range] - show all breakpoints in range (default all)", 0, cmd_show },
+    { "show", "[range] [max] - show labels and breakpoints in range, up to max lines", 0, cmd_show },
 
     { "set", "{a|x|y|sp|pc|n|v|d|i|z|c} value - modify a register or flag", 0, cmd_set },
     { "ticks", "[value] - query or set the current cycle count", 0, cmd_ticks },
@@ -561,7 +694,7 @@ Command _cmds[] = {
 
     { "load", "romfile addr - read binary file to memory", 0, cmd_load },
     { "save", "romfile [range] - write memory to file (default full dump)", 0, cmd_save },
-    { "heatmap", "mapfile - dump memory usage to files mapfile-[aw].dat", 0, cmd_heatmap },
+    { "heatmap", "[range] [reset|save mapfile] - view, reset or save heatmap data", 0, cmd_heatmap },
     { "blockfile", "[blockfile] - use binary file for block storage, empty to disable", 0, cmd_blockfile },
     { "quit", "- leave c65", 0, cmd_quit },
     { "help", "or ? - show this help", 0, cmd_help },

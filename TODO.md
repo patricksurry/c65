@@ -1,5 +1,13 @@
 TODO
 
+- save and reset heatmap: heatmap [range] [r|w|reset|dump]
+
+- delete [range] [enum] - only delete specified kind
+
+- parse_enum(const char* [], NULL terminated, initials?)
+
+- cmd_label - validate symbol using shared code w/ token()?
+
 - option for case insensitive labels on load or always?
 
 - labelfile is currently very specific to default c64tass format. It also tries to exclude numeric constants
@@ -10,4 +18,3 @@ TODO
 
 - disassemble backward from PC would be handy but seems indeterminate, e.g. bytes $20 $80 $60 before
   PC could be JSR $6080, BRA $60 or RTS
-
