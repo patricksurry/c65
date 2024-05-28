@@ -17,7 +17,7 @@ s 3
 next
 d
 b $100.1ff r       ; break on any stack read
-show
+inspect
 c
 stack
 ; test some simple expressions
@@ -47,4 +47,5 @@ m *20               ; dereference zp byte
 label ptr 20
 m @ptr              ; derefernce zp word (20 -> 1234)
 d @*ptr             ; dereference indirect zp word (20 -> 34 -> $ff00)
+heat
 q

@@ -14,10 +14,11 @@
 #include "monitor.h"
 
 
-uint8_t memory[65536];
-uint8_t breakpoints[65536];
-uint64_t heatrs[65536];
-uint64_t heatws[65536];
+uint8_t memory[0x10000];
+uint8_t breakpoints[0x10000];
+uint64_t heat_rs[0x10000];
+uint64_t heat_ws[0x10000];
+uint64_t heat_xs[0x10000];
 
 uint64_t ticks = 0;
 
@@ -76,7 +77,7 @@ const char* opfmt(uint8_t op) {
 
 uint8_t read6502(uint16_t addr) {
   io_magic_read(addr);
-  heatrs[addr] += 1;
+  heat_rs[addr] += 1;
   if (breakpoints[addr] & BREAK_READ) {
     break_flag |= BREAK_READ;
     rw_brk = addr;
@@ -86,7 +87,7 @@ uint8_t read6502(uint16_t addr) {
 
 void write6502(uint16_t addr, uint8_t val) {
   io_magic_write(addr, val);
-  heatws[addr] += 1;
+  heat_ws[addr] += 1;
   if (breakpoints[addr] & BREAK_WRITE) {
     break_flag |= BREAK_WRITE;
     rw_brk = addr;
@@ -191,7 +192,7 @@ int save_heatmap(const char* heatfile) {
     return -1;
   }
   printf("c65: writing heatmap read counts to %s\n", _fname);
-  fwrite(heatrs, sizeof(uint64_t), 0x10000, fout);
+  fwrite(heat_rs, sizeof(uint64_t), 0x10000, fout);
   fclose(fout);
 
   sprintf(_fname, "%s%s", heatfile, "-w.dat");
@@ -201,7 +202,7 @@ int save_heatmap(const char* heatfile) {
     return -1;
   }
   printf("c65: writing heatmap write counts to %s\n", _fname);
-  fwrite(heatws, sizeof(uint64_t), 0x10000, fout);
+  fwrite(heat_ws, sizeof(uint64_t), 0x10000, fout);
   fclose(fout);
   return 0;
 }
@@ -321,6 +322,7 @@ int main(int argc, char *argv[]) {
         step_mode = STEP_OVER;
         over_addr = pc+3;
       }
+      heat_xs[pc]++;
       ticks += step6502();
       if (step_mode == STEP_OVER && pc == over_addr) step_mode = STEP_NEXT;
       if (opcode == 0x00) break_flag |= brk_action;  /* BRK ? */

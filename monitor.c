@@ -93,12 +93,14 @@ void heatmap(uint16_t start, uint16_t end, int mode) {
     start = (start >> zoom) << zoom;
 
     /* aggregate the data we're after */
-    for(i=0; i<1024; i++)
-        data[i] = 0;
+    /* we aggregate by max to preserve the same scale as we zoom
+        in some cases sum might be more useful but for max is better for finding hotspots */
+    for(i=0; i<1024; i++) data[i] = 0;
     for(addr=start; addr<start + (1024 << zoom) & addr < 0x10000; addr++) {
         i = (addr-start) >> zoom;
-        if (mode & BREAK_READ && data[i] < heatrs[addr]) data[i] = heatrs[addr];
-        if (mode & BREAK_WRITE && data[i] < heatws[addr]) data[i] = heatws[addr];
+        if (mode & BREAK_READ && data[i] < heat_rs[addr]) data[i] = heat_rs[addr];
+        if (mode & BREAK_WRITE && data[i] < heat_ws[addr]) data[i] = heat_ws[addr];
+        if (mode & BREAK_PC && data[i] < heat_xs[addr]) data[i] = heat_xs[addr];
     }
     /*
     set up a log color scale by picking a number of bits for each bucket
@@ -118,17 +120,10 @@ void heatmap(uint16_t start, uint16_t end, int mode) {
     if (!heat_scale) heat_scale = 1;        /* want at least one bit per bucket or labels looks silly */
 
     /* add a header line.  with even zoom levels each row of 64 blocks shares the same labeling */
-    printf("\n     ");
-    for(i=0; i<64; i++) {
-        if (!(i & 0xf)) printf(" ");
-        if (zoom&2) {   /* 0   1   2   3 .... */
-            if (i&3) printf(" ");
-            else printf("%x", i>>2);
-        } else {        /* 012345678... */
-            printf("%x", i&0xf);
-        }
-    }
-    puts("");
+    if (zoom&2)
+        printf("\n      0   1   2   3    4   5   6   7    8   9   a   b    c   d   e   f   \n");
+    else
+        printf("\n      0123456789abcdef 0123456789abcdef 0123456789abcdef 0123456789abcdef\n");
     /* draw the data */
     for(i=0; i<1024; i++) {
         addr = start + (i << zoom);
@@ -145,7 +140,6 @@ void heatmap(uint16_t start, uint16_t end, int mode) {
         printf("%s %llx ", heatstr(d-1), d);
     }
     printf("(%x byte%s/block)\n\n", 1 << zoom, zoom ? "s": "");
-
 }
 
 char* _fmt_addr(char *buf, uint16_t addr, int len) {
@@ -202,7 +196,7 @@ uint16_t disasm(uint16_t start, uint16_t end) {
 
         /* show the name of the opcode, with heatmap */
         p = line + 19 + n_fmt;
-        p += sprintf(p, TXT_N "%s %.4s ", heatstr(heatrs[addr]), opname(op));
+        p += sprintf(p, TXT_N "%s %.4s ", heatstr(heat_rs[addr]), opname(op));
         addr++;
 
         /* show the addressing mode detail */
@@ -408,9 +402,10 @@ void cmd_delete() {
     printf("Removed %d breakpoint%s.\n", n, n==1?"":"s");
 }
 
-void cmd_show() {
+void cmd_inspect() {
     /* show breakpoints and labels for a range of memory */
-    uint16_t start, end, nmax;
+    uint16_t start, end, nmax, raddr, waddr, xaddr;
+    uint64_t rmax, wmax, xmax;
     int endl, addr, span, n, prv, brk, new;
     const Symbol *sym;
 
@@ -421,7 +416,12 @@ void cmd_show() {
     ) return;
 
     endl = end <= start ? 0x10000 : end;
-    for (prv=n=0, addr=start; addr < endl && n < nmax; prv=brk, addr++) {
+
+    for (prv=n=0, addr=start; addr < endl; prv=brk, addr++) {
+        if (addr==start || heat_rs[addr] > rmax) rmax = heat_rs[raddr=addr];
+        if (addr==start || heat_ws[addr] > wmax) wmax = heat_ws[waddr=addr];
+        if (addr==start || heat_xs[addr] > xmax) xmax = heat_xs[xaddr=addr];
+        if (n >= nmax) continue;
 
         brk = breakpoints[addr] & (BREAK_PC | BREAK_READ | BREAK_WRITE);
         sym = get_next_symbol_by_value(NULL, addr);
@@ -459,6 +459,10 @@ void cmd_show() {
     }
     if (n >= nmax) puts("...");
     else if (n == 0) puts("(no labels or breakpoints found)");
+    printf(
+        "top usage: %llx reads @ %.4x; %llx writes @ %.4x; %llx execute @ %.4x\n",
+        rmax, raddr, wmax, waddr, xmax, xaddr
+    );
 }
 
 void cmd_set() {
@@ -622,6 +626,7 @@ void cmd_heatmap() {
         switch(tolower(*p)) {
             case 'r': mode = BREAK_READ; break;
             case 'w': mode = BREAK_WRITE; break;
+            case 'x': mode = BREAK_PC; break;
         }
     }
     /* TODO optional enum, then optional save or reset */
@@ -631,7 +636,7 @@ void cmd_heatmap() {
             return;
         } else if (0==strcasecmp(p, "reset")) {
             // heat_scale = 0;
-            // heatrs, heatws = 0;
+            // heat_rs, heat_ws = 0;
         }
     */
     heatmap(start, end, mode);
@@ -683,7 +688,7 @@ Command _cmds[] = {
     { "stack", "- show stack contents, sp+1 through $1ff", 0, cmd_stack },
     { "break",  "[range] r|w|a|x - trigger break on read, write, any access or execute (default)", 0, cmd_break },
     { "delete",  "[range] - remove all breakpoints in range (default PC)", 0, cmd_delete },
-    { "show", "[range] [max] - show labels and breakpoints in range, up to max lines", 0, cmd_show },
+    { "inspect", "[range] [max] - show labels and breakpoints in range, up to max lines", 0, cmd_inspect },
 
     { "set", "{a|x|y|sp|pc|n|v|d|i|z|c} value - modify a register or flag", 0, cmd_set },
     { "ticks", "[value] - query or set the current cycle count", 0, cmd_ticks },

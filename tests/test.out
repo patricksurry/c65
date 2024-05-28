@@ -136,7 +136,7 @@ OUT:
    fffc  00          brk  
    fffd  ff 00 00    bbs7 $00,$0000  ; +0
 PC ffd9  NV-bdIzC  A b4 X 10 Y 00 SP fa > b $100.1ff r       ; break on any stack read
-PC ffd9  NV-bdIzC  A b4 X 10 Y 00 SP fa > show
+PC ffd9  NV-bdIzC  A b4 X 10 Y 00 SP fa > inspect
 0100
   break  r 0100.01fe
 0200  IN
@@ -154,6 +154,7 @@ ff36  BLSKIP
 ff37  NEXTITEM
 ff52  NEXTHEX
 ...
+top usage: 1 reads @ 01f8; 1 writes @ 01f8; 1 execute @ ffd1
 PC ffd9  NV-bdIzC  A b4 X 10 Y 00 SP fa > c
 01fb: memory read
        0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
@@ -336,4 +337,26 @@ NEXTCHAR:
    ff2a  c9 8d       cmp  #$8d
    ff2c  d0 d7       bne  NOTCR ; -41
    ff2e  a0 ff       ldy  #$ff
+PC ffda  nV-bdIzC  A 42 X 10 Y 00 SP fb > heat
+
+      0   1   2   3    4   5   6   7    8   9   a   b    c   d   e   f   
+0000         .                                                           
+1000                                                                     
+2000                                                                     
+3000                                                                     
+4000                                                                     
+5000                                                                     
+6000                                                                     
+7000                                                                     
+8000                                                                     
+9000                                                                     
+a000                                                                     
+b000                                                                     
+c000                                                                     
+d000                                                                     
+e000                                                                     
+f000  .                                                                 .
+
+      0   1 . 2 : 4 + 8 * 10 % 20 & 40 @ 80 (40 bytes/block)
+
 PC ffda  nV-bdIzC  A 42 X 10 Y 00 SP fb > q
