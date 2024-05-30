@@ -158,7 +158,7 @@ ff34  SETMODE
 ff36  BLSKIP
 ff37  NEXTITEM
 ...
-top usage: 1 reads @ 01f8; 1 writes @ 01f8; 1 execute @ ffd1
+hotspots: 1 reads @ 01f8; 1 writes @ 01f8; 1 execute @ ffd1
 PC ffd9  NV-bdIzC  A b4 X 10 Y 00 SP fa > c
 01fb: memory read
        0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef

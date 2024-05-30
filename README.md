@@ -4,7 +4,9 @@ that mimics [`pymon`](https://github.com/mnaberez/py65)'s
 default magic getc and putc interface.
 `c65` also provides a magic [blockio](#blockio) interface
 which supports simulator IO to/from an external binary file,
-as well as a simple [debugger](#debugger).
+as well as a simple [profiling debugger](#debugger).
+
+![heatmap](heatmap.png "Heatmap profiling in c65")
 
 ## Usage
 
@@ -94,7 +96,8 @@ the end of `forth_code/user_words.fs`:
 
 ## Debugger
 
-`c65` offers a simple debugger which is useful to explore and extend Taliforth.
+`c65` offers a simple profiling debugger which is useful to explore and extend Taliforth
+or other 65x02 code.
 Enable it with the `-g` option.  You can also provide
 a `64tass` label file to import symbolic labels for your code.
 For example:
@@ -107,12 +110,15 @@ should result in something like this:
     c65: PC=f016 A=00 X=00 Y=00 S=fd FLAGS=<N0 V0 B0 D0 I1 Z0 C0> ticks=0
     Skipped 84 lines from ../docs/py65mon-labelmap.txt
     Type ? for help, ctrl-C to interrupt, quit to exit.
-    PC f016  NV-BDIZC  A 00 X 00 Y 00 SP fd >
+    kernel_init:
+    io_end:
+    *  f016  78          sei
+    PC f016  nv-bdIzc  A 00 X 00 Y 00 SP fd >
 
-Your actual prompt should be a little more colorful,
-particularly to highlight which CPU flags are currently set.
+Your actual prompt should be a little more colorful.
+In particular note that CPU flags are highlighed and capitalized when set.
 Try typing `d<tab><enter>` to disassemble from the current program counter.
-(Actually just `d<enter>` is enough, but sometimes tab completion is handy.)
+(Actually `d<enter>` is enough, but sometimes tab completion is handy.)
 
     PC f016  NV-BDIZC  A 00 X 00 Y 00 SP fd > disassemble
     kernel_init:
@@ -127,15 +133,18 @@ Try typing `d<tab><enter>` to disassemble from the current program counter.
        f024  4c 00 80  jmp  xt_cold
     PC f016  NV-BDIZC  A 00 X 00 Y 00 SP fd >
 
-You can continue diassembly with just `<enter>`, repeating the previous command
-after advancing the current address.  Persistent command history is available with the up/down arrows,
+You can continue disassembly with just `<enter>`, repeating the previous command
+from the current address.  Command history is available with the up/down arrows,
 along with many [Gnu readline](https://en.wikipedia.org/wiki/GNU_Readline)-style key bindings.
 For example try `ctrl-R` to search previous commands.
+History persists across sessions in the `.c65` file.
 
 You can disassemble a specific
-range with `d xt_cold/20` (the `/20` means a range of $20 bytes) or `d f000:f024`
-(two addresses or labels are separated by `:`).   To check what'll be printed try
-`mem s_kernel_id`.  This shows 64 bytes by default but the same `/offset` or `:end`
+range with `d f000.f024`
+(use `.` to separate address expressions, wozmon style)
+or `d xt_cold..20` (the extra `.` indicates an offset of $20 bytes from the start address).
+To check what the init routine will print, try `mem s_kernel_id`.
+This shows 256 bytes by default but the same `..offset` or `.end`
 trick works for custom ranges.
 
     PC f016  NV-BDIZC  A 00 X 00 Y 00 SP fd > mem s_kernel_id
@@ -143,74 +152,122 @@ trick works for custom ranges.
     f040  65 66 61 75 6c 74 20 6b  65 72 6e 65 6c 20 66 6f  |efault kernel fo|
     f050  72 20 70 79 36 35 6d 6f  6e 20 28 30 34 2e 20 44  |r py65mon (04. D|
     f060  65 63 20 32 30 32 32 29  0a 00 00 00 00 00 00 00  |ec 2022)........|
-    f070  00 00                                             |..              |
+    ...
 
 You can set breakpoints on read, write or execute.
 Type `break xt_cold` to stop executing
-once the startup message is printed.  We can also verify that
-ROM (above $8000) is never written with `break 8000:ffff write`
-but should also remove breakpoints on the magic IO block with `del f000/16`.
+once the startup message is printed.  We can check that
+ROM (above $8000) is never written with `break 8000..ffff write`
+but might follow up with `del f000..16` to ignore writes to the magic IO block.
 Let's also add a read breakpoint within the startup message: `break f040 read`.
-This should should stop after reading the 'e' in 'default'.
-Execution breakpoints are shown in disasembly listings as `B`,
+This should should stop after reading the *e* in *default*.
+Execution breakpoints display as `B` in disasembly listings,
 and read/write breakpoints are highlighted in `memory` dumps.
 With the above breakpoints, use `continue` to execute from the current PC:
 
     PC f030  NV-BDIZC  A 54 X 00 Y 00 SP fb > c
-    Tali Forth 2 dBreak on reading $f040
-    PC f01c  NV-BDIZC  A 65 X 0e Y 00 SP fd >
+    Tali Forth 2 df040: memory read
+        0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+    f040  65 66 61 75 6c 74 20 6b  65 72 6e 65 6c 20 66     |efault kernel f |
+    *  f01c  f0 06       beq  $f024 ; +6
 
-Continue again after the read breakpoint to land at `xt_cold`:
+Note the expected memory break after printing *d* and reading *e*.
+Continue again to land at `xt_cold`:
 
+    PC f01c  nv-bdIzc  A 65 X 0e Y 00 SP fd > c
     efault kernel for py65mon (04. Dec 2022)
-    PC 8000  NV-BDIZC  A 00 X 37 Y 00 SP fd > d
     xt_cold:
     code0:
     forth:
-    *B 8000  d8        cld
-       8001  a9 2d     lda  #$2d
-       8003  85 12     sta  output
-       ...
+    *B 8000  d8          cld
 
-You can `step` instruction by instruction, or use `next` to step while treating
+You can `step` instruction by instruction, or use `next` to treat
 `jsr ... rts` as one step.  You can `call` a subroutine and return
-to the current `pc` on completion, or just `run` from an arbitrary address or label.
-Other useful commands are `fill` to change the contents of memory or `set`
-to change a register or flag value.  Use `?` to see all available commands.
+to the current PC on completion, or just `run` from an arbitrary address or label.
+You can even test interrupts using `trigger irq`, `nmi` or `reset`.  This will set up
+the simulator state as if the corresponding interrupt had occurred,
+ready for for you to `step` or `continue` into your handler.
 
-When the simulation is running past a breakpoint, type `ctrl-C` to return to the prompt.
+When the simulation is running without a breakpoint, use `ctrl-C` to return to the prompt.
 Try `continue` again to enter the interactive Taliform REPL.  Put some numbers on the stack
-and use `ctrl-C` to get back to the debugger.  Since Tali uses X as its stack pointer,
-`mem 6e:80` will show our content:
+and use `ctrl-C` to get back to the debugger.
 
     Tali Forth 2 for the 65c02
     Version 1.1 06. Apr 2024
     Copyright 2014-2024 Scot W. Stevenson, Sam Colwell, Patrick Surry
     Tali Forth 2 comes with absolutely NO WARRANTY
     Type 'bye' to exit
-    1 2 3 4 .s <4> 1 2 3 4  ok     <ctrl-C>
-    PC f02a  NV-BDIZC  A 03 X 6e Y 00 SP f9 > mem 6e:80
+    1 2 3 4 .s <4> 1 2 3 4  ok
+    <ctrl-C>
+
+Since Tali uses X as its stack pointer,
+`mem x.80` will show our content:
+
+    *  f02a  f0 fb       beq  kernel_getc ; -5
+    PC f02a  nv-bdIzc  A 03 X 6e Y 00 SP f9 > m x.80
+           0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
     0060                                             00 02  |              ..|
     0070  04 00 03 00 02 00 01 00  00 00 00 00 00 00 00 00  |................|
 
-The extra `$2000` is presumably part of the REPL,
+The extra `$2000` is presumably part of the REPL state,
 and the empty space beyond $78 is Tali's "flood plain".  Setting `break 78:80 any`
 would be a good indicator of stack underflow.
-When you're done `quit` will exit the debugger.  Hopefully you get the idea!
 
-## Profiling
+Note how we used `x` as the start of the range.  In fact you can use C-style expressions
+wherever an address or value is called for.  Mix and match symbols (case-sensitive),
+CPU registers and flags (case insensitive) and constant values.  A few extra unary
+operators let you dereference a memory address as a word (`@`) or byte (`*`),
+or extract the most (`>`) or least (`<`) significant byte of a value like most assemblers.
+Use the `~` command as a handy calculator to evaluate one or more expressions,
+displaying the results in multiple bases.  For example:
 
-`c65` can optionally dump profiling data
-to files called `c65-coverage.dat` and `c65-writes.dat`.
-Each contains a binary dump of 64K `int`s, which respectively
-count the number of accesses (read or write) to each memory
-location, along with the number of writes.
-(The number of reads can be inferred by differencing the arrays.)
+    PC f02a  nv-bdIzc  A 03 X 6e Y 00 SP f9 > ~ *(s_kernel_id + y)
+    *(s_kernel_id + y)      :=  $54  #84  %1010100  'T
 
-These files are useful for profiling "hot spots" in simulated code,
-and for ensuring that read-only regions are never written.
-The `profile.ipynb` file contains a [jupyter notebook](https://jupyter.org/)
-with some examples of exploring this data.
+Combined with `set`, expressions make it easy to mimic opcodes or
+do more complex manipulations like `set a <(@(jmp_table + x) + y)`.
+You can also modify flag values like `set z #42 & my_flag`.
+If you want to change memory, use `fill` to set a range of addresses
+to a sequence of values.
+
+`c65` also supports simple profiling by counting read, write and execute
+access to each memory location.  After executing the Tali REPL,
+we can use `heatmap` to get a sense for what happened:
+
+    PC f02a  nv-bdIzc  A 03 X 6e Y 00 SP f9 > heatmap
+
+          0   1   2   3    4   5   6   7    8   9   a   b    c   d   e   f
+    0000  @&     &+   +                        :
+    1000
+    2000
+    3000
+    4000
+    5000
+    6000
+    7000                                                     . . . . . . . .
+    8000  +..::. :.  ::    :    .  :::*     : ..: ::          ::::++**+ :..+
+    9000       : : : ...:+   .* ***          .:.      ..++::  :.....::
+    a000
+    b000               ...                           +++++++ +:::::::::::::::
+    c000  :::::::::::::::: ::::+:::........ ......
+    d000             ..              &&+:*: .
+    e000
+    f000  %.                                                                .
+
+        0   1 . 4 : 10 + 40 * 100 % 400 & 1000 @ 4000 (40 bytes/block)
+
+The ascii art is better in color, but we can still see hotspots in the first
+half of zero page as well as the top of page one (the data and return stack).
+This overview is summarizing 64 ($40) bytes in each character but we can zoom in
+to smaller ranges.  For example `heatmap 9400..400 x` shows which individual
+addresses have been executed as opcodes.  Use `inspect 9400..400` to
+find labels, breakpoints and the top hotspots within that range.  You'll also notice
+that `disassemble` will now include profiling from the last heatmap which
+can be helpful to find dead code, critical sections and potential branch optimizations.
+
+That's probably enough for now, but if you're keen you can always
+use `?` to list more available commands and options.
+When you're done `quit` will exit the debugger.  Have fun!
 
 ## Developers
 
@@ -220,5 +277,6 @@ which supports both Windows and simple ANSI escapes for the prompt, with one mod
 SIGINT (ctrl-C) to interrupt the simulator rather than act as a line editing command.
 [`fake65c02.h`](https://github.com/C-Chads/MyLittle6502) has been modified slightly to support extended W65C02
 NOP instructions as well as disassembly.
-
-Early on I tried a simulator based on https://github.com/omarandlorraine/fake6502 but it seems to have some subtle bug. It runs most of TaliForth in 65c02 mode but `: foo 3 2 + ;` fails with a stack underflow.
+(Early on I tried a simulator based on https://github.com/omarandlorraine/fake6502
+but it seems to have some subtle bug. It runs most of TaliForth in 65c02 mode but `: foo 3 2 + ;`
+fails with a stack underflow.)

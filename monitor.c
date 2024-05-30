@@ -87,6 +87,43 @@ char* heatstr(uint64_t d) {
     return _heatbuf;
 }
 
+void clear_heatmap(uint16_t start, uint16_t end, int mode) {
+    heat_scale = 0;
+    int addr, endl;
+
+    endl = end > start ? end : 0x10000;
+    for(addr=start; addr<endl; addr++) {
+        if (mode & MONITOR_READ) heat_rs[addr] = 0;
+        if (mode & MONITOR_WRITE) heat_ws[addr] = 0;
+        if (mode & MONITOR_PC) heat_xs[addr] = 0;
+    }
+}
+
+int save_heatmap(const char* fname, uint16_t start, uint16_t end, int mode) {
+    FILE *fout;
+    int addr, endl;
+    uint64_t data[0x10000], d;
+
+    endl = end > start ? end : 0x10000;
+    for (addr=start; addr<endl; addr++) {
+        d = 0;
+        if (mode & MONITOR_READ) d += heat_rs[addr];
+        if (mode & MONITOR_WRITE) d += heat_ws[addr];
+        if (mode & MONITOR_PC) d += heat_xs[addr];
+        data[addr] = d;
+    }
+
+    fout = fopen(fname, "wb");
+    if (!fout) {
+        fprintf(stderr, "Error writing %s\n", fname);
+        return -1;
+    }
+    fwrite(data+start, sizeof(uint64_t), endl-start, fout);
+    fclose(fout);
+
+    return 0;
+}
+
 void heatmap(uint16_t start, uint16_t end, int mode) {
     uint64_t data[1024], dmax, d;
     int i, zoom, addr, endl;
@@ -390,14 +427,19 @@ void cmd_break() {
 void cmd_delete() {
     uint16_t start, end;
     int addr, endl, n;
+    uint8_t mode;
 
-    if (E_OK != parse_range(&start, &end, pc, 1) || E_OK != parse_end()) return;
+    if (
+        E_OK != parse_range(&start, &end, pc, 1)
+        || E_OK != parse_enum(_monitor_names, _monitor_vals, &mode, MONITOR_ANY)
+        || E_OK != parse_end()
+    ) return;
 
     endl = end <= start ? 0x10000 : end;
 
     for(n=0, addr=start; addr < endl; addr++)
-        if (breakpoints[addr]) {
-            breakpoints[addr] = 0;
+        if (breakpoints[addr] & mode) {
+            breakpoints[addr] &= ~mode;
             n++;
         }
     org = start;
@@ -462,7 +504,7 @@ void cmd_inspect() {
     if (n >= nmax) puts("...");
     else if (n == 0) puts("(no labels or breakpoints found)");
     printf(
-        "top usage: %llx reads @ %.4x; %llx writes @ %.4x; %llx execute @ %.4x\n",
+        "hotspots: %llx reads @ %.4x; %llx writes @ %.4x; %llx execute @ %.4x\n",
         rmax, raddr, wmax, waddr, xmax, xaddr
     );
 }
@@ -614,26 +656,31 @@ void cmd_save() {
 
 
 void cmd_heatmap() {
+    /* heatmap [clear|save mapfile] [range] [r|w|d|x] */
     uint16_t start=0, end=0;
-    uint8_t mode;
+    uint8_t mode, cmd=0;
+    const char *fname, *_sub_names[] = { "clear", "save", 0 };
+    const int _sub_vals[] = {1, 2};
+    int err;
 
+    err = parse_enum(_sub_names, _sub_vals, &cmd, DEFAULT_OPTIONAL);
+    if (err != E_OK && err != E_MISSING) return;
+    if (cmd == 2 && !(fname = parse_delim())) {
+        puts("Missing filename");
+        return;
+    }
+    /* try parsing a mode before range in case range was omitted, otherwise 'heat x' interprets
+     * x as an expression defining the range... */
     if (E_OK != parse_enum(_monitor_names, _monitor_vals, &mode, DEFAULT_OPTIONAL)) {
-        /* avoid 'heat x' being parsed as a range of x */
         if (E_OK != parse_range(&start, &end, 0, 0)) return;
         if (E_OK != parse_enum(_monitor_names, _monitor_vals, &mode, MONITOR_DATA)) return;
     }
-    /* TODO optional enum, then optional save or reset */
-        /*
-        if (0==strcasecmp(p, "save")) {
-            (void)save_heatmap(p);  // specify read/write/all
-            return;
-        } else if (0==strcasecmp(p, "reset")) {
-            // heat_scale = 0;
-            // heat_rs, heat_ws = 0;
-        }
-    */
-    heatmap(start, end, mode);
 
+    switch (cmd) {
+        case 0: heatmap(start, end, mode); break;
+        case 1: clear_heatmap(start, end, mode); break;
+        case 2: (void)save_heatmap(fname, start, end, mode); break;
+    }
 }
 
 void cmd_quit() {
@@ -680,7 +727,7 @@ Command _cmds[] = {
     { "disassemble", "[range] - show code disassembly for range (or current)", 1, cmd_disasm },
     { "memory", "[range] - dump memory contents for range (or current)", 1, cmd_memory },
     { "stack", "- show stack contents, sp+1 through $1ff", 0, cmd_stack },
-    { "break",  "[range] r|w|a|x - trigger break on read, write, any access or execute (default)", 0, cmd_break },
+    { "break",  "[range] [r|w|d|x] - trigger break on read, write, any access or execute (default)", 0, cmd_break },
     { "delete",  "[range] - remove all breakpoints in range (default PC)", 0, cmd_delete },
     { "inspect", "[range] [max] - show labels and breakpoints in range, up to max lines", 0, cmd_inspect },
 
@@ -693,7 +740,7 @@ Command _cmds[] = {
 
     { "load", "romfile addr - read binary file to memory", 0, cmd_load },
     { "save", "romfile [range] - write memory to file (default full dump)", 0, cmd_save },
-    { "heatmap", "[range] [reset|save mapfile] - view, reset or save heatmap data", 0, cmd_heatmap },
+    { "heatmap", " [clear|save mapfile] [range] [r|w|d|x] - view, reset or save heatmap data", 0, cmd_heatmap },
     { "blockfile", "[blockfile] - use binary file for block storage, empty to disable", 0, cmd_blockfile },
     { "quit", "- leave c65", 0, cmd_quit },
     { "help", "or ? - show this help", 0, cmd_help },

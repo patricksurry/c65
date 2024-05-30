@@ -38,7 +38,6 @@ int set_reg_or_flag(const char *name, int v);
 
 int load_memory(const char* romfile, int addr);
 int save_memory(const char* romfile, uint16_t start, uint16_t end);
-int save_heatmap(const char* heatfile);
 
 extern void reset6502();
 extern void irq6502();

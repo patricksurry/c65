@@ -181,32 +181,6 @@ int save_memory(const char* romfile, uint16_t start, uint16_t end) {
   return 0;
 }
 
-char _fname[1024];
-int save_heatmap(const char* heatfile) {
-  FILE *fout;
-
-  sprintf(_fname, "%s%s", heatfile, "-r.dat");
-  fout = fopen(_fname, "wb");
-  if (!fout) {
-    fprintf(stderr, "Error writing %s\n", _fname);
-    return -1;
-  }
-  printf("c65: writing heatmap read counts to %s\n", _fname);
-  fwrite(heat_rs, sizeof(uint64_t), 0x10000, fout);
-  fclose(fout);
-
-  sprintf(_fname, "%s%s", heatfile, "-w.dat");
-  fout = fopen(_fname, "wb");
-  if (!fout) {
-    fprintf(stderr, "Error writing %s\n", _fname);
-    return -1;
-  }
-  printf("c65: writing heatmap write counts to %s\n", _fname);
-  fwrite(heat_ws, sizeof(uint64_t), 0x10000, fout);
-  fclose(fout);
-  return 0;
-}
-
 void show_cpu() {
   printf(
       "c65: PC=%04x A=%02x X=%02x Y=%02x S=%02x FLAGS=<N%d V%d B%d D%d I%d Z%d "

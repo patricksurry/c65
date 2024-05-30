@@ -1,12 +1,5 @@
 TODO
 
-- delete [range] [enum] - only delete specified kind
-
-- save and reset heatmap: heatmap [range] [r|w|reset|dump]; or separate save command that can save different things?
-heat [range] [r|w|x]
-heat reset [range] [r|w|x]
-heat export file [range] [r|w|x]
-
 - option for case insensitive labels on load or always?
 
 - labelfile is currently very specific to default c64tass format. It also tries to exclude numeric constants

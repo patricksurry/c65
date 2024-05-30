@@ -485,6 +485,8 @@ int parse_enum(const char *names[], const int vals[], uint8_t *v, int dflt) {
             return E_OK;
         }
     }
+    if (dflt == DEFAULT_OPTIONAL) return E_MISSING;
+
     printf("Invalid value, expected:");
     for(i=0; names[i]; i++) printf(" %s", names[i]);
     puts("");
