@@ -179,12 +179,16 @@ void heatmap(uint16_t start, uint16_t end, int mode) {
         if ((i & 0x3f) == 0x3f) puts("");
     }
     /* add a legend*/
-    printf("\n      0 ");
+    printf("\n%c%c%c count 0 ",
+        mode & MONITOR_READ ? 'r':'-',
+        mode & MONITOR_WRITE ? 'w':'-',
+        mode & MONITOR_PC ? 'x':'-'
+    );
     for(i=0; i<8; i++) {
         d = 1 << (i * heat_scale);
         printf("%s %llx ", heatstr(d-1), d);
     }
-    printf("(%x byte%s/block)\n\n", 1 << zoom, zoom ? "s": "");
+    printf("(%x byte%s/char)\n\n", 1 << zoom, zoom ? "s": "");
 }
 
 char* _fmt_addr(char *buf, uint16_t addr, int len) {

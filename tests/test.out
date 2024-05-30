@@ -361,6 +361,6 @@ d000
 e000                                                                     
 f000  .                                                                 .
 
-      0   1 . 2 : 4 + 8 * 10 % 20 & 40 @ 80 (40 bytes/block)
+rw- count 0   1 . 2 : 4 + 8 * 10 % 20 & 40 @ 80 (40 bytes/char)
 
 PC ffda  nV-bdIzC  A 42 X 10 Y 00 SP fb > q

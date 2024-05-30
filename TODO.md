@@ -1,5 +1,8 @@
 TODO
 
+- `continue <input>` would be useful to consume input and break on eof, e.g. for test coverage or
+  batching an initial section of working code
+
 - option for case insensitive labels on load or always?
 
 - labelfile is currently very specific to default c64tass format. It also tries to exclude numeric constants

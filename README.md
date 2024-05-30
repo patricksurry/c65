@@ -254,7 +254,7 @@ we can use `heatmap` to get a sense for what happened:
     e000
     f000  %.                                                                .
 
-        0   1 . 4 : 10 + 40 * 100 % 400 & 1000 @ 4000 (40 bytes/block)
+    rw- count 0   1 . 4 : 10 + 40 * 100 % 400 & 1000 @ 4000 (40 bytes/char)
 
 The ascii art is better in color, but we can still see hotspots in the first
 half of zero page as well as the top of page one (the data and return stack).
