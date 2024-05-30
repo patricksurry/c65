@@ -87,6 +87,10 @@ PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > d escape .. 6       ; error: labels ar
 unexpected
     escape .. 6       
 -----^
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > label alpha a000
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > unl alpha
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > label 6ty b000      ; invalid label
+Invalid label
 PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > set A 42            ; reserved labels are case insensitive
 PC ff00  nv-bdIzc  A 42 X 00 Y 00 SP fd > set x 10
 PC ff00  nv-bdIzc  A 42 X 10 Y 00 SP fd > set v 1
@@ -143,6 +147,7 @@ PC ffd9  NV-bdIzC  A b4 X 10 Y 00 SP fa > inspect
 f001  PUTC
 f005  PEEKC
 ff00  RESET
+  break  x ff00
 ff05  NOTCR
 ff10  ESCAPE
 ff15  GETLINE
@@ -152,7 +157,6 @@ ff33  SETSTOR
 ff34  SETMODE
 ff36  BLSKIP
 ff37  NEXTITEM
-ff52  NEXTHEX
 ...
 top usage: 1 reads @ 01f8; 1 writes @ 01f8; 1 execute @ ffd1
 PC ffd9  NV-bdIzC  A b4 X 10 Y 00 SP fa > c
@@ -308,7 +312,7 @@ PC ffda  nV-bdIzC  A 42 X 10 Y 00 SP fb > m @ptr              ; derefernce zp wo
 1330  00 00 00 00                                       |....            |
 PC ffda  nV-bdIzC  A 42 X 10 Y 00 SP fb > d @*ptr             ; dereference indirect zp word (20 -> 34 -> $ff00)
 RESET:
-   ff00  d8          cld  
+ B ff00  d8          cld  
    ff01  58          cli  
    ff02  a0 7f       ldy  #$7f
    ff04  98          tya  

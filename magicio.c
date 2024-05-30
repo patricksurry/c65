@@ -107,7 +107,7 @@ long mark = 0;    // used for timer
 void sigint_handler() {
   // catch ctrl-c and break back to monitor
   /*TODO in input loop still have to hit a key after ctrl-c */
-  break_flag |= BREAK_INT;
+  break_flag |= MONITOR_SIGINT;
 }
 
 void io_init(int debug) {
@@ -136,7 +136,7 @@ void io_magic_read(uint16_t addr) {
   if (addr == io_getc) {
     while (!_kbhit() && !break_flag) {}
     ch = break_flag ? 0x03: _getc();
-    if (ch == EOF) break_flag |= BREAK_EXIT;
+    if (ch == EOF) break_flag |= MONITOR_EXIT;
     memory[addr] = (uint8_t)ch;
   } else if (addr == io_peekc) {
     ch = _kbhit() ? (_getc() | 0x80) : 0;

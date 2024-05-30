@@ -26,10 +26,12 @@ int remove_symbols_by_value(uint16_t value);
 #define E_RANGE -3
 
 int strexpr(char *src, int *result);
+int symlen(const char *s);
 
 void parse_start(char *src);
 int parse_end();
 char* parse_delim();
+int parse_enum(const char *names[], const int vals[], uint8_t *v, int dflt);
 int parse_int(int *v, int dflt);
 int parse_byte(uint8_t *v, int dflt);
 int parse_addr(uint16_t *v, int dflt);

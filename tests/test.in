@@ -5,6 +5,9 @@ DIS                 ; commands are case insensitve
 dis RESET . NOTCR
 d ESCAPE .. 6
 d escape .. 6       ; error: labels are case sensitive (and not $e .. 6)
+label alpha a000
+unl alpha
+label 6ty b000      ; invalid label
 set A 42            ; reserved labels are case insensitive
 set x 10
 set v 1

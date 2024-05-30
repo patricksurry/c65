@@ -1,12 +1,15 @@
-/* break conditions used in breakpoints */
-#define BREAK_READ  1
-#define BREAK_WRITE 2
-#define BREAK_PC    4
-#define BREAK_ONCE  8
+/* access modes */
+#define MONITOR_READ         1
+#define MONITOR_WRITE        2
+#define MONITOR_DATA         (MONITOR_READ|MONITOR_WRITE)
+#define MONITOR_PC           4
+#define MONITOR_ANY          (MONITOR_PC|MONITOR_DATA)
+#define MONITOR_ONCE         8       /* flag to clear on hit */
+
 /* special break conditions */
-#define BREAK_BRK 16
-#define BREAK_INT 32
-#define BREAK_EXIT 64
+#define MONITOR_BRK          16      /* BRK instruction */
+#define MONITOR_SIGINT       32      /* break back to */
+#define MONITOR_EXIT         64      /* exit simulation */
 
 #define STEP_NONE 0
 #define STEP_INST 1
@@ -36,3 +39,7 @@ int set_reg_or_flag(const char *name, int v);
 int load_memory(const char* romfile, int addr);
 int save_memory(const char* romfile, uint16_t start, uint16_t end);
 int save_heatmap(const char* heatfile);
+
+extern void reset6502();
+extern void irq6502();
+extern void nmi6502();

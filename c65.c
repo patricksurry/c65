@@ -78,8 +78,8 @@ const char* opfmt(uint8_t op) {
 uint8_t read6502(uint16_t addr) {
   io_magic_read(addr);
   heat_rs[addr] += 1;
-  if (breakpoints[addr] & BREAK_READ) {
-    break_flag |= BREAK_READ;
+  if (breakpoints[addr] & MONITOR_READ) {
+    break_flag |= MONITOR_READ;
     rw_brk = addr;
   }
   return memory[addr];
@@ -88,8 +88,8 @@ uint8_t read6502(uint16_t addr) {
 void write6502(uint16_t addr, uint8_t val) {
   io_magic_write(addr, val);
   heat_ws[addr] += 1;
-  if (breakpoints[addr] & BREAK_WRITE) {
-    break_flag |= BREAK_WRITE;
+  if (breakpoints[addr] & MONITOR_WRITE) {
+    break_flag |= MONITOR_WRITE;
     rw_brk = addr;
   }
   memory[addr] = val;
@@ -161,7 +161,7 @@ int load_memory(const char* romfile, int addr) {
   sz = ftell(fin);
   rewind(fin);
   if (addr < 0)
-    addr = 65536 - sz;
+    addr = 0x10000 - sz;
   printf("c65: reading %s to $%04x:$%04x\n", romfile, addr, addr+sz-1);
   fread(memory + addr, 1, sz, fin);
   fclose(fin);
@@ -220,7 +220,7 @@ void show_cpu() {
 int main(int argc, char *argv[]) {
   const char *romfile = NULL, *labelfile = NULL;
   int addr = -1, start = -1, debug = 0, errflg = 0, c;
-  int brk_action = BREAK_EXIT;
+  int brk_action = MONITOR_EXIT;
   uint16_t over_addr;
 
   while ((c = getopt(argc, argv, "xgr:a:s:m:b:l:")) != -1) {
@@ -252,7 +252,7 @@ int main(int argc, char *argv[]) {
         debug = 1;
         /* fall through */
       case 'x':
-        brk_action = BREAK_BRK;
+        brk_action = MONITOR_BRK;
         break;
 
       case ':': /* option without operand */
@@ -308,13 +308,13 @@ int main(int argc, char *argv[]) {
     then count one step and switch back to STEP_NEXT
   STEP_RUN - execute instructions until BREAK condition
 
-  Any BRK opcode generates BREAK_BRK or BREAK_EXIT (see -x)
-  Ctrl-C (SIGINT) generates BREAK_INT
+  Any BRK opcode generates MONITOR_BRK or MONITOR_EXIT (see -x)
+  Ctrl-C (SIGINT) generates MONITOR_SIGINT
   */
 
-  while (!(break_flag & BREAK_EXIT)) {
+  while (!(break_flag & MONITOR_EXIT)) {
     if (debug) {
-      do { monitor_command(); } while (step_mode == STEP_NONE);
+      do monitor_command(); while (step_mode == STEP_NONE);
     }
     break_flag = 0;
     while (!break_flag && (step_mode == STEP_RUN || step_target)) {
@@ -326,10 +326,9 @@ int main(int argc, char *argv[]) {
       ticks += step6502();
       if (step_mode == STEP_OVER && pc == over_addr) step_mode = STEP_NEXT;
       if (opcode == 0x00) break_flag |= brk_action;  /* BRK ? */
-      if (breakpoints[pc] & BREAK_PC) break_flag |= BREAK_PC;
-      if (breakpoints[pc] & BREAK_ONCE) {
-        break_flag |= BREAK_ONCE;
-        breakpoints[pc] ^= BREAK_ONCE;
+      if (breakpoints[pc] & MONITOR_PC) {
+        break_flag |= MONITOR_PC;
+        if (breakpoints[pc] & MONITOR_ONCE) breakpoints[pc] ^= (MONITOR_ONCE|MONITOR_PC);
       }
       if (step_mode == STEP_NEXT || step_mode == STEP_INST) step_target--;
     }

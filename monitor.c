@@ -36,6 +36,14 @@ char _prompt[512];
 
 #define FLAG_FMT(f, ch) (status & FLAG_##f ? TXT_B3 : TXT_LO), (status & FLAG_##f ? ch: tolower(ch))
 
+const char* _monitor_names[] = {
+    "read", "write", "data", "execute", "x", 0
+};
+
+const int _monitor_vals[] = {
+    MONITOR_READ, MONITOR_WRITE, MONITOR_DATA, MONITOR_PC, MONITOR_PC
+};
+
 char* prompt() {
     sprintf(_prompt,
         TXT_LO "PC" TXT_N " %.4x  "
@@ -98,9 +106,9 @@ void heatmap(uint16_t start, uint16_t end, int mode) {
     for(i=0; i<1024; i++) data[i] = 0;
     for(addr=start; addr<start + (1024 << zoom) & addr < 0x10000; addr++) {
         i = (addr-start) >> zoom;
-        if (mode & BREAK_READ && data[i] < heat_rs[addr]) data[i] = heat_rs[addr];
-        if (mode & BREAK_WRITE && data[i] < heat_ws[addr]) data[i] = heat_ws[addr];
-        if (mode & BREAK_PC && data[i] < heat_xs[addr]) data[i] = heat_xs[addr];
+        if (mode & MONITOR_READ && data[i] < heat_rs[addr]) data[i] = heat_rs[addr];
+        if (mode & MONITOR_WRITE && data[i] < heat_ws[addr]) data[i] = heat_ws[addr];
+        if (mode & MONITOR_PC && data[i] < heat_xs[addr]) data[i] = heat_xs[addr];
     }
     /*
     set up a log color scale by picking a number of bits for each bucket
@@ -183,7 +191,7 @@ uint16_t disasm(uint16_t start, uint16_t end) {
         p += sprintf(
             line, "%c%c %.4x  " TXT_LO,
             pc == addr ? '*' : ' ',
-            breakpoints[addr] & BREAK_PC ? 'B': ' ',
+            breakpoints[addr] & MONITOR_PC ? 'B': ' ',
             addr
         );
 
@@ -250,12 +258,12 @@ void dump(uint16_t start, uint16_t end) {
             if (addr < endl) {
                 c = memory[addr];
                 chrs[addr & 0xf] = (c >= 32 && c < 128 ? c : '.');
-                c = breakpoints[addr] & (BREAK_READ | BREAK_WRITE);
+                c = breakpoints[addr] & MONITOR_DATA;
                 v = memory[addr++];
                 p += sprintf(p, "%s%.2x%s%s",
-                    c & BREAK_READ ?
-                        (c & BREAK_WRITE ? TXT_B1: TXT_B2)
-                        : (c & BREAK_WRITE ? TXT_B3: ""),
+                    c & MONITOR_READ ?
+                        (c & MONITOR_WRITE ? TXT_B1: TXT_B2)
+                        : (c & MONITOR_WRITE ? TXT_B3: ""),
                     v,
                     c ? TXT_N: "",
                     (addr & 0xf) == 8 ? "  " : " "
@@ -281,13 +289,12 @@ void cmd_go() {
     step_mode = STEP_RUN;
 }
 
-
 void cmd_continue() {
     /* run imdefinitely, optionally to one-time breakpoint */
     uint16_t addr;
     if (E_OK != parse_addr(&addr, pc) || E_OK != parse_end()) return;
 
-    if (addr != pc) breakpoints[addr] |= BREAK_ONCE;
+    if (addr != pc && !(breakpoints[addr] & MONITOR_PC)) breakpoints[addr] |= MONITOR_PC | MONITOR_ONCE;
     step_mode = STEP_RUN;
 }
 
@@ -317,7 +324,7 @@ void cmd_call() {
 
     /* trigger break once we return from subroutine */
     pc = target;
-    breakpoints[ret] |= BREAK_ONCE;
+    if (!(breakpoints[ret] & MONITOR_PC)) breakpoints[ret] |= MONITOR_PC | MONITOR_ONCE;
     ret--;  // 6502 rts is weird...
 
     /* write return address to stack, directly via memory[] to avoid callbacks */
@@ -326,6 +333,20 @@ void cmd_call() {
     sp -= 2;
 
     step_mode = STEP_RUN;
+}
+
+void cmd_trigger() {
+    const char* _names[] = {"reset", "irq", "nmi", 0};
+    const int _vals[] = {0, 1, 2};
+    uint8_t v;
+
+    if (E_OK != parse_enum(_names, _vals, &v, DEFAULT_REQUIRED) || E_OK != parse_end()) return;
+
+    switch (v) {
+        case 0: reset6502(); break;
+        case 1: irq6502(); break;
+        case 2: nmi6502(); break;
+    }
 }
 
 void cmd_disasm() {
@@ -353,36 +374,17 @@ void cmd_stack() {
 
 void cmd_break() {
     uint16_t start, end;
-    uint8_t f=0;
+    uint8_t mode;
     int endl, addr;
-    char *p;
 
     if (E_OK != parse_range(&start, &end, pc, 1)) return;
     endl = end < start ? 0x10000 : end;
 
-    p = parse_delim();
-    if (E_OK != parse_end()) return;
-    switch(p ? tolower(*p):'x') {
-        case 'r':
-            f = BREAK_READ;
-            break;
-        case 'w':
-            f = BREAK_WRITE;
-            break;
-        case 'a':
-            f = BREAK_READ | BREAK_WRITE;
-            break;
-        case 'x':
-            f = BREAK_PC;
-            break;
-    }
-    if (f) {
-        for(addr=start; addr < endl; addr++)
-            breakpoints[addr] |= f;
-        org = start;
-    } else {
-        printf("Unknown breakpoint type '%c'\n", *p);
-    }
+    if (E_OK != parse_enum(_monitor_names, _monitor_vals, &mode, MONITOR_PC) || E_OK != parse_end()) return;
+
+    for(addr=start; addr < endl; addr++)
+        breakpoints[addr] |= mode;
+    org = start;
 }
 
 void cmd_delete() {
@@ -423,7 +425,7 @@ void cmd_inspect() {
         if (addr==start || heat_xs[addr] > xmax) xmax = heat_xs[xaddr=addr];
         if (n >= nmax) continue;
 
-        brk = breakpoints[addr] & (BREAK_PC | BREAK_READ | BREAK_WRITE);
+        brk = breakpoints[addr] & MONITOR_ANY;
         sym = get_next_symbol_by_value(NULL, addr);
 
         new = brk & (brk ^ prv);
@@ -438,18 +440,18 @@ void cmd_inspect() {
 
         if (new) {   /* did some flags just switch on? */
             printf("  break");
-            if (new & BREAK_PC) {
-                for(span=addr; span<0x10000 && breakpoints[span] & BREAK_PC; span++) /**/;
+            if (new & MONITOR_PC) {
+                for(span=addr; span<0x10000 && breakpoints[span] & MONITOR_PC; span++) /**/;
                 if (--span != addr) printf("  x %.4x.%.4x", addr, span);
                 else printf("  x %.4x", addr);
             }
-            if (new & BREAK_READ ) {
-                for(span=addr; span<0x10000 && breakpoints[span] & BREAK_READ; span++) /**/;
+            if (new & MONITOR_READ ) {
+                for(span=addr; span<0x10000 && breakpoints[span] & MONITOR_READ; span++) /**/;
                 if (--span != addr) printf("  r %.4x.%.4x", addr, span);
                 else printf("  r %.4x", addr);
             }
-            if (new & BREAK_WRITE) {
-                for(span=addr; span<0x10000 && breakpoints[span] & BREAK_WRITE; span++) /**/;
+            if (new & MONITOR_WRITE) {
+                for(span=addr; span<0x10000 && breakpoints[span] & MONITOR_WRITE; span++) /**/;
                 if (--span != addr) printf("  w %.4x.%.4x", addr, span);
                 else printf("  w %.4x", addr);
             }
@@ -554,11 +556,7 @@ void cmd_label() {
     uint16_t addr;
 
     lbl = parse_delim();
-    if (
-        !lbl
-        || isdigit(lbl[0])
-        || strlen(lbl) != strspn(lbl, "_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
-    ) {
+    if (strlen(lbl) != symlen(lbl)) {
         puts("Invalid label");
         return;
     }
@@ -614,20 +612,15 @@ void cmd_save() {
     org = start;
 }
 
+
 void cmd_heatmap() {
-    uint16_t start, end;
-    int mode = BREAK_READ | BREAK_WRITE;
-    char *p;
+    uint16_t start=0, end=0;
+    uint8_t mode;
 
-    if (E_OK != parse_range(&start, &end, 0, 0)) return;
-
-    p = parse_delim();
-    if (p) {
-        switch(tolower(*p)) {
-            case 'r': mode = BREAK_READ; break;
-            case 'w': mode = BREAK_WRITE; break;
-            case 'x': mode = BREAK_PC; break;
-        }
+    if (E_OK != parse_enum(_monitor_names, _monitor_vals, &mode, DEFAULT_OPTIONAL)) {
+        /* avoid 'heat x' being parsed as a range of x */
+        if (E_OK != parse_range(&start, &end, 0, 0)) return;
+        if (E_OK != parse_enum(_monitor_names, _monitor_vals, &mode, MONITOR_DATA)) return;
     }
     /* TODO optional enum, then optional save or reset */
         /*
@@ -682,6 +675,7 @@ Command _cmds[] = {
     { "step", "- [count] step by single instructions", 1, cmd_step },
     { "next", "- [count] like step but treats jsr ... rts as one step", 1, cmd_next },
     { "call", "addr - call subroutine leaving PC unchanged", 0, cmd_call },
+    { "trigger", "irq|nmi|reset - trigger an interrupt signal", 0, cmd_trigger },
 
     { "disassemble", "[range] - show code disassembly for range (or current)", 1, cmd_disasm },
     { "memory", "[range] - dump memory contents for range (or current)", 1, cmd_memory },
@@ -791,8 +785,8 @@ void monitor_command() {
     if (step_mode != STEP_NONE) {
         org = pc;
         step_mode = STEP_NONE;
-        if (break_flag & (BREAK_READ | BREAK_WRITE)) {
-            printf("%.4x: memory %s\n", rw_brk, break_flag & BREAK_READ ? "read": "write");
+        if (break_flag & MONITOR_DATA) {
+            printf("%.4x: memory %s\n", rw_brk, break_flag & MONITOR_READ ? "read": "write");
             dump(rw_brk & 0xfff0, rw_brk | 0xf);
         }
         disasm(pc, pc+1);

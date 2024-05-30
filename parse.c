@@ -25,6 +25,7 @@ T --> val | "(" E ")" | ~ T
 #define EX_TERM 5
 #define EX_UNARY 6
 #define EX_BINARY 7
+#define EX_TERNARY 8
 
 
 #define OP_NONE 0               /* special sentinal */
@@ -35,7 +36,7 @@ T --> val | "(" E ")" | ~ T
 #define OP_GE 0x1f
 #define OP_AND 0x01
 #define OP_OR 0x02
-#define OP_BINARY_FLAG 0x80     /* flags binary operators in the operator stack */
+#define BINOP_FLAG 0x80     /* flags binary operators in the operator stack */
 
 Symbol *symbols = NULL;
 
@@ -43,8 +44,8 @@ char *cursor, *parse_last;
 
 /* parser state variables */
 static unsigned char opstk[32]; /* stack of operators */
-static int valstk[32], literal; /* stack of values, and most recent literal */
-static uint16_t n_op, n_val;    /* stack pointers */
+static int valstk[32], qstk[32], literal; /* stack of values, ?: conditions, and most recent literal */
+static uint16_t n_op, n_val, n_q;    /* stack pointers */
 
 /* characters representing each operator, usually corresponding to the input text */
 const char
@@ -120,8 +121,11 @@ int apply_binary(unsigned char op, int a, int b, int *out) {
         case OP_AND: *out = a && b; return EX_OK;
         case OP_OR: *out = a || b; return EX_OK;
 
-        case '?': *out = b << 1 | (a ? 1 : 0); return EX_OK;
-        case ':': *out = (a & 1) ? (a >> 1) : b; return EX_OK;
+        case '?': qstk[n_q++] = a; *out = b; return EX_OK;
+        case ':':
+            if (!n_q) return EX_TERNARY;
+            *out = qstk[--n_q] ? a : b;
+            return EX_OK;
     }
     return EX_BINARY;
 }
@@ -188,33 +192,35 @@ int remove_symbols_by_value(uint16_t value) {
     return n;
 }
 
+int symlen(const char *s) {
+    int n=0;
+    if (s && (*s == '_' || isalpha(*s)))
+        for (n=1; *(s+n) == '_' || isalnum(*(s+n)); n++) /**/ ;
+    return n;
+}
+
 unsigned char maybe_literal(void) {
-    char *p = cursor;
+    char *p;
     static char name[64];
-    int base;
+    int base, n;
     const Symbol *sym;
 
-    if (!strchr("$#%'", *cursor) && !isalnum(*cursor)) return OP_NONE;
+    n = symlen(cursor);
+    if (!strchr("$#%'", *cursor) && !isdigit(*cursor) && !n) return OP_NONE;
 
     /* first try symbols since user can disambiguate numbers with a prefix */
-    p = cursor;
-    /* do we have a string of 0-9a-zA-Z_ ? */
-    while (isalnum(*p) || *p == '_') {
-        name[p-cursor] = *p;
-        p++;
-    }
-    /* so maybe it's a symbol */
-    if (p != cursor) {
-        name[p-cursor] = 0;
+    if (n) {
+        strncpy(name, cursor, n);
+        name[n] = 0;
         /* is it dynamic symbol? */
         if ((literal = get_reg_or_flag(name)) >= 0) {
-            cursor = p;
+            cursor += n;
             return '#';
         }
         /* regular symbol? */
         if ((sym = get_symbol(name))) {
             literal = sym->value;
-            cursor = p;
+            cursor += n;
             return '#';
         }
     }
@@ -295,8 +301,8 @@ int pop_op() {
     /* process the top operator on the stack, consuming its input value(s) to produce an output value */
     unsigned char tok = opstk[--n_op];
     int err;
-    if (tok & OP_BINARY_FLAG) {
-        tok ^= OP_BINARY_FLAG;
+    if (tok & BINOP_FLAG) {
+        tok ^= BINOP_FLAG;
         err = apply_binary(tok, valstk[n_val-2], valstk[n_val-1], valstk + n_val-2);
         n_val--;
     } else
@@ -306,12 +312,12 @@ int pop_op() {
 
 int has_lower_precedence(unsigned char this, unsigned char other) {
     /* sentinel is lowest, unary are all highest */
-    if (other == OP_NONE || !(this & OP_BINARY_FLAG)) return 0;
+    if (other == OP_NONE || !(this & BINOP_FLAG)) return 0;
     /* binary is lower than any unary */
-    if (!(other & OP_BINARY_FLAG)) return 1;
+    if (!(other & BINOP_FLAG)) return 1;
 
     /* numbered from highest to lowest precdence */
-    return binaryprec(this ^ OP_BINARY_FLAG) > binaryprec(other ^ OP_BINARY_FLAG);
+    return binaryprec(this ^ BINOP_FLAG) > binaryprec(other ^ BINOP_FLAG);
 }
 
 int push_op(unsigned char tok) {
@@ -352,19 +358,17 @@ int match_expr() {
 
     if ((err = match_term())) return err;
     while ((tok = next_token(1))) {
-        if ((err = push_op(tok | OP_BINARY_FLAG))) return err;
+        if ((err = push_op(tok | BINOP_FLAG))) return err;
         if ((err = match_term())) return err;
     }
     while (opstk[n_op-1] != OP_NONE)
         if ((err = pop_op())) return err;
-
     return EX_OK;
 }
 
 int strexpr(char *src, int *result) {
     int err;
-    n_op = 0;
-    n_val = 0;
+    n_op = n_val = n_q = 0;
 
     cursor = src;
     if (!cursor) return EX_EMPTY;
@@ -375,6 +379,7 @@ int strexpr(char *src, int *result) {
     opstk[n_op++] = OP_NONE;
     if ((err = match_expr())) return cursor==src ? EX_EMPTY : err;
     if (n_val != 1) return EX_VALSTK;
+    if (n_q != 0) return EX_TERNARY;
     *result = valstk[0];
     return EX_OK;
 }
@@ -403,6 +408,9 @@ void show_error(int error) {
             break;
         case EX_BINARY:
             puts("unknown binary operator");
+            break;
+        case EX_TERNARY:
+            puts("unbalanced or ambiguous ?: expression");
             break;
     }
     /* restore delimited word if that was last */
@@ -446,6 +454,41 @@ char* parse_delim() {
     parse_last = cursor;
     p = strtok_r(parse_last, " \t", &cursor);
     return p;
+}
+
+int parse_enum(const char *names[], const int vals[], uint8_t *v, int dflt) {
+    int i;
+    char *p;
+    const char *q;
+    while (cursor && isblank(*cursor)) cursor++;
+    if (!cursor || !(*cursor)) {
+            switch (dflt) {
+                case DEFAULT_OPTIONAL: return E_MISSING;
+                case DEFAULT_REQUIRED:
+                    printf("Missing required value:");
+                    for(i=0; names[i]; i++) printf(" %s", names[i]);
+                    puts("");
+                    return E_PARSE;
+                default: *v = (uint8_t)dflt; return E_OK;
+            }
+    }
+    for (i=0; names[i]; i++) {
+        p = cursor;
+        q = names[i];
+        while (*p && !isblank(*p) && tolower(*p) == *q) {
+            p++;
+            q++;
+        }
+        if(!(*p) || isblank(*p)) {
+            *v = vals[i];
+            cursor = p;
+            return E_OK;
+        }
+    }
+    printf("Invalid value, expected:");
+    for(i=0; names[i]; i++) printf(" %s", names[i]);
+    puts("");
+    return E_RANGE;
 }
 
 /* parse an expression as an integer, returning an error status */
