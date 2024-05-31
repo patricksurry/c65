@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <ctype.h>
 
 
@@ -184,7 +185,7 @@ int save_memory(const char* romfile, uint16_t start, uint16_t end) {
 void show_cpu() {
   printf(
       "c65: PC=%04x A=%02x X=%02x Y=%02x S=%02x FLAGS=<N%d V%d B%d D%d I%d Z%d "
-      "C%d> ticks=%llu\n",
+      "C%d> ticks=%" PRIu64 "\n",
       pc, a, x, y, sp, status & FLAG_SIGN ? 1 : 0,
       status & FLAG_OVERFLOW ? 1 : 0, status & FLAG_BREAK ? 1 : 0,
       status & FLAG_DECIMAL ? 1 : 0, status & FLAG_INTERRUPT ? 1 : 0,

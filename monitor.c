@@ -534,7 +534,7 @@ void cmd_ticks() {
     if (E_OK == (err = parse_int(&v, DEFAULT_OPTIONAL))) {
         ticks = v;
     } else if (E_MISSING == err) {
-        printf("%llu ticks\n", ticks);
+        printf("%" PRIu64 " ticks\n", ticks);
     }
 }
 
