@@ -158,7 +158,7 @@ ff34  SETMODE
 ff36  BLSKIP
 ff37  NEXTITEM
 ...
-hotspots: 1 reads @ 01f8; 1 writes @ 01f8; 1 execute @ ffd1
+hotspots: $1 read @ 01f8; $1 write @ 01f8; $1 execute @ ffd1
 PC ffd9  NV-bdIzC  A b4 X 10 Y 00 SP fa > c
 01fb: memory read
        0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
@@ -361,6 +361,6 @@ d000
 e000                                                                     
 f000  .                                                                 .
 
-rw- count 0   1 . 2 : 4 + 8 * 10 % 20 & 40 @ 80 (40 bytes/char)
+rw- count 0   $1 . $2 : $4 + $8 = $10 * $20 # $40 @ $80 ($40 bytes/char)
 
 PC ffda  nV-bdIzC  A 42 X 10 Y 00 SP fb > q

@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <ctype.h>
 
 #define FAKE6502_NOT_STATIC 1
@@ -70,7 +71,7 @@ int bitlen(uint64_t v) {
 static char _heatbuf[16];
 
 char* heatstr(uint64_t d) {
-    const char heat_ascii[] = " .:+*%&@";
+    const char heat_ascii[] = " .:+=*#@";
     const int heat_colors[] = {100, 104, 106, 102, 103, 101, 105, 107};
 
     int c;
@@ -141,7 +142,7 @@ void heatmap(uint16_t start, uint16_t end, int mode) {
     /* we aggregate by max to preserve the same scale as we zoom
         in some cases sum might be more useful but for max is better for finding hotspots */
     for(i=0; i<1024; i++) data[i] = 0;
-    for(addr=start; addr<start + (1024 << zoom) & addr < 0x10000; addr++) {
+    for(addr=start; addr < start + (1024 << zoom) && addr < 0x10000; addr++) {
         i = (addr-start) >> zoom;
         if (mode & MONITOR_READ && data[i] < heat_rs[addr]) data[i] = heat_rs[addr];
         if (mode & MONITOR_WRITE && data[i] < heat_ws[addr]) data[i] = heat_ws[addr];
@@ -178,17 +179,17 @@ void heatmap(uint16_t start, uint16_t end, int mode) {
         printf("%s", heatstr(data[i]));
         if ((i & 0x3f) == 0x3f) puts("");
     }
-    /* add a legend*/
-    printf("\n%c%c%c count 0 ",
+    /* add a legend */
+    printf("\n%c%c%c count 0",
         mode & MONITOR_READ ? 'r':'-',
         mode & MONITOR_WRITE ? 'w':'-',
         mode & MONITOR_PC ? 'x':'-'
     );
     for(i=0; i<8; i++) {
         d = 1 << (i * heat_scale);
-        printf("%s %llx ", heatstr(d-1), d);
+        printf(" %s $%" PRIx64, heatstr(d-1), d);
     }
-    printf("(%x byte%s/char)\n\n", 1 << zoom, zoom ? "s": "");
+    printf(" ($%x byte%s/char)\n\n", 1 << zoom, zoom ? "s": "");
 }
 
 char* _fmt_addr(char *buf, uint16_t addr, int len) {
@@ -508,7 +509,7 @@ void cmd_inspect() {
     if (n >= nmax) puts("...");
     else if (n == 0) puts("(no labels or breakpoints found)");
     printf(
-        "hotspots: %llx reads @ %.4x; %llx writes @ %.4x; %llx execute @ %.4x\n",
+        "hotspots: $%" PRIx64 " read @ %.4x; $%" PRIx64 " write @ %.4x; $%" PRIx64 " execute @ %.4x\n",
         rmax, raddr, wmax, waddr, xmax, xaddr
     );
 }

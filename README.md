@@ -258,12 +258,16 @@ we can use `heatmap` to get a sense for what happened:
 
 The ascii art is better in color, but we can still see hotspots in the first
 half of zero page as well as the top of page one (the data and return stack).
-This overview is summarizing 64 ($40) bytes in each character but we can zoom in
-to smaller ranges.  For example `heatmap 9400..400 x` shows which individual
+Note the scale doubles in each bucket, so the top few colors capture almost all
+the activity.
+This overview summarizes 64 ($40) bytes in each character but we can zoom in
+to see more detail in smaller ranges.
+For example `heatmap 9400..400 x` shows which individual
 addresses have been executed as opcodes.  Use `inspect 9400..400` to
 find labels, breakpoints and the top hotspots within that range.  You'll also notice
 that `disassemble` will now include profiling from the last heatmap which
 can be helpful to find dead code, critical sections and potential branch optimizations.
+
 
 That's probably enough for now, but if you're keen you can always
 use `?` to list more available commands and options.
