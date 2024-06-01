@@ -19,16 +19,16 @@ NOTCR:
 PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > DIS                 ; commands are case insensitve
 ESCAPE:
    ff10  a9 dc     lda  #$dc
-   ff12  20 e4 ff  jsr  ECHO
+   ff12  20 e6 ff  jsr  ECHO
 GETLINE:
    ff15  a9 8d     lda  #$8d
-   ff17  20 e4 ff  jsr  ECHO
+   ff17  20 e6 ff  jsr  ECHO
    ff1a  a0 01     ldy  #$1
 BACKSPACE:
    ff1c  88        dey  
    ff1d  30 f6     bmi  GETLINE ; -10
 NEXTCHAR:
-   ff1f  ad 05 f0  lda  PEEKC
+   ff1f  ad 04 f0  lda  GETC
 PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > dis RESET:NOTCR
 RESET:
 *  ff00  d8        cld  
@@ -38,7 +38,7 @@ RESET:
 PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > d ESCAPE/6
 ESCAPE:
    ff10  a9 dc     lda  #$dc
-   ff12  20 e4 ff  jsr  ECHO
+   ff12  20 e6 ff  jsr  ECHO
 GETLINE:
    ff15  a9 8d     lda  #$8d
 PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > d escape/6          ; should fail not interpret as $e/6
@@ -49,28 +49,28 @@ PC ff00  nv-bdIzc  A 42 X 10 Y 00 SP fd > set v 1
 PC ff00  nV-bdIzc  A 42 X 10 Y 00 SP fd > set c false         ; should fail not C=1 (since $f is true...)
 Invalid value 'false'
 PC ff00  nV-bdIzc  A 42 X 10 Y 00 SP fd > set c 1
-PC ff00  nV-bdIzC  A 42 X 10 Y 00 SP fd > break ffd2          ; PRBYTE + 1
+PC ff00  nV-bdIzC  A 42 X 10 Y 00 SP fd > break ffd4          ; PRBYTE + 1
 PC ff00  nV-bdIzC  A 42 X 10 Y 00 SP fd > call PRBYTE
-PC ffd2  nV-bdIzC  A 42 X 10 Y 00 SP fa > step
-*B ffd2  4a        lsr  a
-PC ffd3  nV-bdIzc  A 21 X 10 Y 00 SP fa > s 3
-*  ffd3  4a        lsr  a
+PC ffd4  nV-bdIzC  A 42 X 10 Y 00 SP fa > step
+*B ffd4  4a        lsr  a
+PC ffd5  nV-bdIzc  A 21 X 10 Y 00 SP fa > s 3
+*  ffd5  4a        lsr  a
 ...
-PC ffd6  nV-bdIzc  A 04 X 10 Y 00 SP fa > next
-*  ffd6  20 da ff  jsr  PRHEX
-4PC ffd9  NV-bdIzC  A b4 X 10 Y 00 SP fa > d
-*  ffd9  68        pla  
+PC ffd8  nV-bdIzc  A 04 X 10 Y 00 SP fa > next
+*  ffd8  20 dc ff  jsr  PRHEX
+4PC ffdb  NV-bdIzC  A b4 X 10 Y 00 SP fa > d
+*  ffdb  68        pla  
 PRHEX:
-   ffda  29 0f     and  #$f
-   ffdc  09 b0     ora  #$b0
-   ffde  c9 ba     cmp  #$ba
-   ffe0  90 02     bcc  ECHO ; +2
-   ffe2  69 06     adc  #$6
+   ffdc  29 0f     and  #$f
+   ffde  09 b0     ora  #$b0
+   ffe0  c9 ba     cmp  #$ba
+   ffe2  90 02     bcc  ECHO ; +2
+   ffe4  69 06     adc  #$6
 ECHO:
-   ffe4  48        pha  
-   ffe5  29 7f     and  #$7f
-   ffe7  c9 0d     cmp  #$d
-PC ffd9  NV-bdIzC  A b4 X 10 Y 00 SP fa > c
+   ffe6  48        pha  
+   ffe7  29 7f     and  #$7f
+   ffe9  c9 0d     cmp  #$d
+PC ffdb  NV-bdIzC  A b4 X 10 Y 00 SP fa > c
 2PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > stack
 01f0                                             00 00  |              ..|
 PC ff00  NV-bdIzC  A b2 X 10 Y 00 SP fd > ~ 32 #50 &12

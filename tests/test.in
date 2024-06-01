@@ -9,7 +9,7 @@ set x 10
 set v 1
 set c false         ; should fail not C=1 (since $f is true...)
 set c 1
-break ffd2          ; PRBYTE + 1
+break ffd4          ; PRBYTE + 1
 call PRBYTE
 step
 s 3
