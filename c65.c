@@ -224,7 +224,7 @@ int main(int argc, char *argv[]) {
         labelfile = optarg;
         /* fall through */
       case 'g':
-        debug = 1;
+        debug++;
         /* fall through */
       case 'x':
         brk_action = MONITOR_BRK;
@@ -258,6 +258,7 @@ int main(int argc, char *argv[]) {
             "-l <file>  : Read labels from file (implies -g)\n"
             "-x         : BRK should reset via $fffe rather than exit (implied by -g)\n"
             "-g         : Run with interactive debugger\n"
+            "-gg        : Debug but don't break on startup\n"
             "Note: address arguments can be specified in hex like 0x1234\n");
     exit(2);
   }
@@ -289,7 +290,9 @@ int main(int argc, char *argv[]) {
 
   while (!(break_flag & MONITOR_EXIT)) {
     if (debug) {
-      do monitor_command(); while (step_mode == STEP_NONE);
+      /* -gg skips initial break */
+      if (debug == 1) do monitor_command(); while (step_mode == STEP_NONE) ;
+      debug = 1;
     }
     break_flag = 0;
     while (!break_flag && (step_mode == STEP_RUN || step_target)) {

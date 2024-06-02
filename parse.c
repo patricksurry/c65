@@ -515,7 +515,7 @@ int parse_byte(uint8_t *v, int dflt) {
 
     if (E_OK != (err = parse_int(&tmp, dflt))) return err;
     if (abs(tmp) > 255) {
-        printf("byte: value {%d} out of range\n", tmp);
+        printf("byte: value %d out of range\n", tmp);
         return E_RANGE;
     }
     *v = (uint8_t)(tmp & 0xff);
@@ -528,7 +528,7 @@ int parse_addr(uint16_t *v, int dflt) {
 
     if (E_OK != (err = parse_int(&tmp, dflt))) return err;
     if (tmp < 0 || tmp > 0xffff) {
-        printf("address: value {%d} out of range\n", tmp);
+        printf("address: value %d out of range\n", tmp);
         return E_RANGE;
     }
     *v = (uint16_t)(tmp & 0xffff);
