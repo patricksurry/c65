@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <inttypes.h>
+#include <ctype.h>
 
 
 #define FAKE6502_NOT_STATIC 1
@@ -13,13 +15,16 @@
 #include "monitor.h"
 
 
-uint8_t memory[65536];
-uint8_t breakpoints[65536];
-int rws[65536];
-int writes[65536];
+uint8_t memory[0x10000];
+uint8_t breakpoints[0x10000];
+uint64_t heat_rs[0x10000];
+uint64_t heat_ws[0x10000];
+uint64_t heat_xs[0x10000];
 
-long ticks = 0;
+uint64_t ticks = 0;
+
 int break_flag = 0, step_mode = STEP_RUN, step_target = -1;
+uint16_t rw_brk;
 
 static uint8_t _opmodes[256] = { 255 };
 
@@ -73,26 +78,72 @@ const char* opfmt(uint8_t op) {
 
 uint8_t read6502(uint16_t addr) {
   io_magic_read(addr);
-  rws[addr] += 1;
-  if (breakpoints[addr] & BREAK_READ) {
-    break_flag |= BREAK_READ;
-    printf("Break on reading $%.4x\n", addr);
+  heat_rs[addr] += 1;
+  if (breakpoints[addr] & MONITOR_READ) {
+    break_flag |= MONITOR_READ;
+    rw_brk = addr;
   }
   return memory[addr];
 }
 
-
 void write6502(uint16_t addr, uint8_t val) {
   io_magic_write(addr, val);
-  rws[addr] += 1;
-  writes[addr] += 1;
-  if (breakpoints[addr] & BREAK_WRITE) {
-    break_flag |= BREAK_WRITE;
-    printf("Break on writing $%.4x\n", addr);
+  heat_ws[addr] += 1;
+  if (breakpoints[addr] & MONITOR_WRITE) {
+    break_flag |= MONITOR_WRITE;
+    rw_brk = addr;
   }
   memory[addr] = val;
 }
 
+const char *_flags = "nv bdizc";
+int get_reg_or_flag(const char *name) {
+    const char *q;
+    /* return register or flag value with case insenstive name */
+    if (0 == strcasecmp(name, "pc")) {
+        return pc;
+    } else if (0 == strcasecmp(name, "a")) {
+        return a;
+    } else if (0 == strcasecmp(name, "x")) {
+        return x;
+    } else if (0 == strcasecmp(name, "y")) {
+        return y;
+    } else if (0 == strcasecmp(name, "sp")) {
+        return sp;
+    } else if (strlen(name) == 1 && (q = strchr(_flags, tolower(name[0])))) {
+        return status & (1 << (7-(q-_flags))) ? 1: 0;
+    }
+    return -1;
+}
+
+int set_reg_or_flag(const char *name, int v) {
+    const char *q;
+    uint8_t bit;
+
+    /* return register or flag value with case insenstive name */
+    if (0 == strcasecmp(name, "pc")) {
+        pc = v;
+        return 0;
+    } else if (0 == strcasecmp(name, "a")) {
+        a = v;
+        return 0;
+    } else if (0 == strcasecmp(name, "x")) {
+        x = v;
+        return 0;
+    } else if (0 == strcasecmp(name, "y")) {
+        y = v;
+        return 0;
+    } else if (0 == strcasecmp(name, "sp")) {
+        sp = v;
+        return 0;
+    } else if (strlen(name) == 1 && (q = strchr(_flags, tolower(name[0])))) {
+        bit = 1 << (7-(q-_flags));
+        if (bit) status |= bit;
+        else status ^= bit;
+        return 0;
+    }
+    return -1;
+}
 
 int load_memory(const char* romfile, int addr) {
   /*
@@ -111,7 +162,7 @@ int load_memory(const char* romfile, int addr) {
   sz = ftell(fin);
   rewind(fin);
   if (addr < 0)
-    addr = 65536 - sz;
+    addr = 0x10000 - sz;
   printf("c65: reading %s to $%04x:$%04x\n", romfile, addr, addr+sz-1);
   fread(memory + addr, 1, sz, fin);
   fclose(fin);
@@ -122,7 +173,7 @@ int save_memory(const char* romfile, uint16_t start, uint16_t end) {
   FILE *fout;
   fout = fopen(romfile, "wb");
   if (!fout) {
-    fprintf(stderr, "File not found: %s\n", romfile);
+    fprintf(stderr, "Error writing %s\n", romfile);
     return -1;
   }
   printf("c65: writing $%04x:$%04x to %s", start, end, romfile);
@@ -134,7 +185,7 @@ int save_memory(const char* romfile, uint16_t start, uint16_t end) {
 void show_cpu() {
   printf(
       "c65: PC=%04x A=%02x X=%02x Y=%02x S=%02x FLAGS=<N%d V%d B%d D%d I%d Z%d "
-      "C%d> ticks=%lu\n",
+      "C%d> ticks=%" PRIu64 "\n",
       pc, a, x, y, sp, status & FLAG_SIGN ? 1 : 0,
       status & FLAG_OVERFLOW ? 1 : 0, status & FLAG_BREAK ? 1 : 0,
       status & FLAG_DECIMAL ? 1 : 0, status & FLAG_INTERRUPT ? 1 : 0,
@@ -144,7 +195,7 @@ void show_cpu() {
 int main(int argc, char *argv[]) {
   const char *romfile = NULL, *labelfile = NULL;
   int addr = -1, start = -1, debug = 0, errflg = 0, c;
-  int brk_action = BREAK_EXIT;
+  int brk_action = MONITOR_EXIT;
   uint16_t over_addr;
 
   while ((c = getopt(argc, argv, "xgr:a:s:m:b:l:")) != -1) {
@@ -173,10 +224,10 @@ int main(int argc, char *argv[]) {
         labelfile = optarg;
         /* fall through */
       case 'g':
-        debug = 1;
+        debug++;
         /* fall through */
       case 'x':
-        brk_action = BREAK_BRK;
+        brk_action = MONITOR_BRK;
         break;
 
       case ':': /* option without operand */
@@ -207,6 +258,7 @@ int main(int argc, char *argv[]) {
             "-l <file>  : Read labels from file (implies -g)\n"
             "-x         : BRK should reset via $fffe rather than exit (implied by -g)\n"
             "-g         : Run with interactive debugger\n"
+            "-gg        : Debug but don't break on startup\n"
             "Note: address arguments can be specified in hex like 0x1234\n");
     exit(2);
   }
@@ -232,13 +284,15 @@ int main(int argc, char *argv[]) {
     then count one step and switch back to STEP_NEXT
   STEP_RUN - execute instructions until BREAK condition
 
-  Any BRK opcode generates BREAK_BRK or BREAK_EXIT (see -x)
-  Ctrl-C (SIGINT) generates BREAK_INT
+  Any BRK opcode generates MONITOR_BRK or MONITOR_EXIT (see -x)
+  Ctrl-C (SIGINT) generates MONITOR_SIGINT
   */
 
-  while (!(break_flag & BREAK_EXIT)) {
+  while (!(break_flag & MONITOR_EXIT)) {
     if (debug) {
-      do { monitor_command(); } while (step_mode == STEP_NONE);
+      /* -gg skips initial break */
+      if (debug == 1) do monitor_command(); while (step_mode == STEP_NONE) ;
+      debug = 1;
     }
     break_flag = 0;
     while (!break_flag && (step_mode == STEP_RUN || step_target)) {
@@ -246,13 +300,13 @@ int main(int argc, char *argv[]) {
         step_mode = STEP_OVER;
         over_addr = pc+3;
       }
+      heat_xs[pc]++;
       ticks += step6502();
       if (step_mode == STEP_OVER && pc == over_addr) step_mode = STEP_NEXT;
       if (opcode == 0x00) break_flag |= brk_action;  /* BRK ? */
-      if (breakpoints[pc] & BREAK_PC) break_flag |= BREAK_PC;
-      if (breakpoints[pc] & BREAK_ONCE) {
-        break_flag |= BREAK_ONCE;
-        breakpoints[pc] ^= BREAK_ONCE;
+      if (breakpoints[pc] & MONITOR_PC) {
+        break_flag |= MONITOR_PC;
+        if (breakpoints[pc] & MONITOR_ONCE) breakpoints[pc] ^= (MONITOR_ONCE|MONITOR_PC);
       }
       if (step_mode == STEP_NEXT || step_mode == STEP_INST) step_target--;
     }
