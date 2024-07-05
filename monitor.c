@@ -332,7 +332,7 @@ void cmd_go() {
 }
 
 void cmd_continue() {
-    /* run imdefinitely, optionally to one-time breakpoint */
+    /* run indefinitely, optionally to one-time breakpoint */
     uint16_t addr;
     if (E_OK != parse_addr(&addr, pc) || E_OK != parse_end()) return;
 
@@ -722,8 +722,8 @@ void cmd_help() {
 }
 
 Command _cmds[] = {
-    { "go", "[addr] - run from pc (or optional addr) until breakpoint", 0, cmd_go },
-    { "continue [addr]", "- run from pc until breakpoint (or optional addr)", 0, cmd_continue },
+    { "go", "[addr] - run from pc (or optional addr) until breakpoint", 1, cmd_go },
+    { "continue [addr]", "- run from pc until breakpoint (or optional addr)", 1, cmd_continue },
     { "step", "- [count] step by single instructions", 1, cmd_step },
     { "next", "- [count] like step but treats jsr ... rts as one step", 1, cmd_next },
     { "call", "addr - call subroutine leaving PC unchanged", 0, cmd_call },
