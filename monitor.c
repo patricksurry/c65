@@ -377,7 +377,7 @@ void cmd_call() {
     step_mode = STEP_RUN;
 }
 
-void cmd_trigger() {
+void cmd_signal() {
     const char* _names[] = {"reset", "irq", "nmi", 0};
     const int _vals[] = {0, 1, 2};
     uint8_t v;
@@ -727,7 +727,7 @@ Command _cmds[] = {
     { "step", "- [count] step by single instructions", 1, cmd_step },
     { "next", "- [count] like step but treats jsr ... rts as one step", 1, cmd_next },
     { "call", "addr - call subroutine leaving PC unchanged", 0, cmd_call },
-    { "trigger", "irq|nmi|reset - trigger an interrupt signal", 0, cmd_trigger },
+    { "signal", "irq|nmi|reset - signal an interrupt", 0, cmd_signal },
 
     { "disassemble", "[range] - show code disassembly for range (or current)", 1, cmd_disasm },
     { "memory", "[range] - dump memory contents for range (or current)", 1, cmd_memory },
