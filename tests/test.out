@@ -1,6 +1,6 @@
 c65: reading tests/wozmon.rom to $ff00:$ffff
 c65: PC=ff00 A=00 X=00 Y=00 S=fd FLAGS=<N0 V0 B0 D0 I1 Z0 C0> ticks=0
-Imported 29 labels from tests/wozmon.sym.  Skipped 0 lines (locals or malformed).
+Imported 37 labels from tests/wozmon.sym.  Skipped 0 lines (locals or malformed).
 Type ? for help, ctrl-C to interrupt, quit to exit.
 RESET:
 *  ff00  d8          cld  
@@ -47,7 +47,7 @@ PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > DIS                 ; commands are cas
 SETSTOR:
    ff35  0a          asl  a
 SETMODE:
-   ff36  85 2b       sta  $2b
+   ff36  85 2b       sta  MODE
 BLSKIP:
    ff38  c8          iny  
 NEXTITEM:
@@ -61,9 +61,9 @@ NEXTITEM:
    ff48  f0 eb       beq  SETSTOR ; -21
    ff4a  c9 d2       cmp  #$d2
    ff4c  f0 3d       beq  RUN ; +61
-   ff4e  86 28       stx  $28
-   ff50  86 29       stx  $29
-   ff52  84 2a       sty  $2a
+   ff4e  86 28       stx  L
+   ff50  86 29       stx  H
+   ff52  84 2a       sty  YSAV
 NEXTHEX:
    ff54  b9 00 02    lda  IN,y
    ff57  49 b0       eor  #$b0
@@ -139,6 +139,14 @@ OUT:
    fffd  ff 00 00    bbs7 $00,$0000  ; +0
 PC ffdb  NV-bdIzC  A b4 X 10 Y 00 SP fa > b $100.1ff r       ; break on any stack read
 PC ffdb  NV-bdIzC  A b4 X 10 Y 00 SP fa > inspect
+0024  XAML
+0025  XAMH
+0026  STL
+0027  STH
+0028  L
+0029  H
+002a  YSAV
+002b  MODE
 0100
   break  r 0100.01fe
 0200  IN
@@ -147,14 +155,6 @@ f004  GETC
 ff00  RESET
   break  x ff00
 ff05  NOTCR
-ff10  ESCAPE
-ff15  GETLINE
-ff1c  BACKSPACE
-ff1f  NEXTCHAR
-ff35  SETSTOR
-ff36  SETMODE
-ff38  BLSKIP
-ff39  NEXTITEM
 ...
 hotspots: $1 read @ 01f8; $1 write @ 01f8; $1 execute @ ffd3
 PC ffdb  NV-bdIzC  A b4 X 10 Y 00 SP fa > c

@@ -4,15 +4,16 @@
 ;  https://github.com/jefftranter/6502/blob/master/asm/wozmon/wozmon.s
 
 ; Page 0 Variables
+    * = $24
 
-XAML            = $24           ;  Last "opened" location Low
-XAMH            = $25           ;  Last "opened" location High
-STL             = $26           ;  Store address Low
-STH             = $27           ;  Store address High
-L               = $28           ;  Hex value parsing Low
-H               = $29           ;  Hex value parsing High
-YSAV            = $2A           ;  Used to see if hex value is given
-MODE            = $2B           ;  $00=XAM, $7F=STOR, $AE=BLOCK XAM
+XAML    .byte ?                 ;  Last "opened" location Low
+XAMH    .byte ?                 ;  Last "opened" location High
+STL     .byte ?                 ;  Store address Low
+STH     .byte ?                 ;  Store address High
+L       .byte ?                 ;  Hex value parsing Low
+H       .byte ?                 ;  Hex value parsing High
+YSAV    .byte ?                 ;  Used to see if hex value is given
+MODE    .byte ?                 ;  $00=XAM, $7F=STOR, $AE=BLOCK XAM
 
 
 ; Other Variables
