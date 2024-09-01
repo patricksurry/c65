@@ -1,6 +1,6 @@
 c65: reading tests/wozmon.rom to $ff00:$ffff
 c65: PC=ff00 A=00 X=00 Y=00 S=fd FLAGS=<N0 V0 B0 D0 I1 Z0 C0> ticks=0
-Skipped 8 lines from tests/wozmon.sym
+Imported 29 labels from tests/wozmon.sym.  Skipped 0 lines (locals or malformed).
 Type ? for help, ctrl-C to interrupt, quit to exit.
 RESET:
 *  ff00  d8          cld  

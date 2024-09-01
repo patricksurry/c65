@@ -17,9 +17,9 @@ MODE            = $2B           ;  $00=XAM, $7F=STOR, $AE=BLOCK XAM
 
 ; Other Variables
 
-IN              = $0200         ;  Input buffer to $027F
-PUTC            = $F001         ;  Write A to screen
-GETC            = $F004         ;  Return char if ready, else 0
+IN      = address($0200)        ;  Input buffer to $027F
+PUTC    = address($F001)        ;  Write A to screen
+GETC    = address($F004)        ;  Return char if ready, else 0
 
 * = $FF00
 

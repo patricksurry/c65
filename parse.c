@@ -273,7 +273,7 @@ unsigned char next_token(uint8_t need_binary) {
                     cursor++;
                 }
             } else if (tok == '=') {
-                if (*cursor == '=') cursor++;    /* allow both = ane == */
+                if (*cursor == '=') cursor++;    /* allow both = and == */
             } else if (tok == '!') {
                 /* require trailing = for != */
                 if (*cursor == '=') cursor++;
