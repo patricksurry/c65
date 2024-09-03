@@ -402,7 +402,7 @@ void cmd_disasm() {
 void cmd_memory() {
     uint16_t start, end;
 
-    if (E_OK != parse_range(&start, &end, org, 256) || E_OK != parse_end()) return;
+    if (E_OK != parse_range(&start, &end, org, 64) || E_OK != parse_end()) return;
 
     dump(start, end);
     org = end;
