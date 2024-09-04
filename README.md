@@ -109,7 +109,7 @@ and should see something like this:
 
     c65: reading ../taliforth-py65mon.bin to $8000:$ffff
     c65: PC=f016 A=00 X=00 Y=00 S=fd FLAGS=<N0 V0 B0 D0 I1 Z0 C0> ticks=0
-    Imported 1581 labelsfrom docs/py65mon-labelmap.txt.  Skipped 389 lines (locals or malformed).
+    Imported 1581 labels from docs/py65mon-labelmap.txt.  Skipped 389 lines (locals or malformed).
     Type ? for help, ctrl-C to interrupt, quit to exit.
     kernel_init:
     io_end:
