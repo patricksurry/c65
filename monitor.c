@@ -402,7 +402,7 @@ void cmd_disasm() {
 void cmd_memory() {
     uint16_t start, end;
 
-    if (E_OK != parse_range(&start, &end, org, 256) || E_OK != parse_end()) return;
+    if (E_OK != parse_range(&start, &end, org, 64) || E_OK != parse_end()) return;
 
     dump(start, end);
     org = end;
@@ -697,27 +697,32 @@ void cmd_quit() {
 
 void cmd_help() {
     int i;
-    puts("\nAvailable commands:\n\n");
+    puts(
+        "\n"
+        "Commands can be shortened to their first few letters, searched in the order below.\n"
+        "For example 'd' means 'disassemble' while 'de' becomes 'delete'.  Use <enter> to\n"
+        "repeat commands like step, next, dis or mem and advance through memory.  Command\n"
+        "history (up/down arrow) and tab completion are also available.\n"
+        "\n"
+        "Literal values like 1234 are assumed to be hex unless explicitly prefixed as binary (%),\n"
+        "decimal (#), hex ($) or ascii (').  Use the ~ command as a calculator to display\n"
+        "values or expressions in all bases. C-style expressions can be used for most\n"
+        "address and value arguments.  Expressions can include (case-sensitive) labels\n"
+        "as well as CPU registers A, X, Y, PC, SP and flags N, V, B, D, I, Z and C.\n"
+        "The usual operators are available, along with * and @ to deference memory by byte or\n"
+        "word and unary < and > to extract the lo and high byte of their argument.\n"
+        "For example >(@(*(pc+1))+x) takes the high byte of an indirect zp address.\n"
+        "\n"
+        "Write address ranges as start.end or start..offset, where the .. form is a shortcut\n"
+        "for start.start+offset.   A few examples: 1234.1256; pc .. 10; .label; and ..20.\n"
+        "\n"
+        "Available commands:\n"
+    );
     for (i=0; 0 != strcmp(_cmds[i].name, "?"); i++)
         printf("  %s %s\n", _cmds[i].name, _cmds[i].help);
-
     puts(
         "\n"
         "Type q to exit. Use ctrl-C to interrupt the simulator.\n"
-        "Commands can be shortened to their first few letters, searched in the order above.\n"
-        "For example 'd' means 'disassemble' while 'de' becomes 'delete'.\n"
-        "Tab completion and command history (up/down) are also available.\n"
-        "Enter repeats commands like step, next, dis or mem as they advance through memory.\n"
-        "Literal values are assumed to be hex, e.g. 123f, unless prefixed as binary (%),\n"
-        "decimal (#), hex ($) or an ascii character ('). Use the ~ command as a calculator\n"
-        "to display values or expression results in all bases. C-style expressions can be used\n"
-        "for most address and value arguments.  Expressions can include (case-sensitive) labels\n"
-        "as well as CPU registers A, X, Y, PC, SP and flags N, V, B, D, I, Z and C.\n"
-        "The usual operators are available, along with * and @ to deference memory by byte or word\n"
-        "and unary < and > to extract least and most significant bytes like most assemblers.\n"
-        "For example >(@(*(pc+1))+x) takes the high byte of an indirect zp address via a PC operand.\n"
-        "Write ranges as start.end or start..offset, e.g. 1234.1268, pc .. 10, 1234, ..20, .label.\n"
-        "Think of the second . as a shortcut: start..offset is the same as start.start+offset\n"
     );
 }
 
@@ -792,7 +797,7 @@ void monitor_init(const char * labelfile) {
     FILE *f;
     char buf[128], *s;
     const char *label;
-    int fail=0, tmp;
+    int skip=0, ok=0;
     linenoiseSetCompletionCallback(completion, NULL);
     linenoiseHistorySetMaxLen(256);
     linenoiseHistoryLoad(".c65");
@@ -803,21 +808,34 @@ void monitor_init(const char * labelfile) {
             printf("Can't read labels from %s\n", labelfile);
             return;
         }
+        /*
+        Read label lines like:
+
+        al f .oplen
+        al 591 .op_binary
+        al 210 .match_mnemonic
+        al 25e .match_mnemonic:_fail
+        */
+
         while (fgets(buf, sizeof(buf), f) > 0) {
-            label = strtok(buf, "\t =");
-            s = strtok(NULL, "\t =\n");
-            /*
-                tailored to 64tass --labels output with 'symbol\t=\t$1234
-                enumerated constants are emitted in similar format, eg. with two digits
-                but we want to ignore those
-            */
-            if (s && s[0] == '$' && strlen(s) == 5 && (E_OK == strexpr(s+1, &tmp))) {
-                add_symbol(label, (uint16_t)tmp);
-            } else {
-                fail++;
+            s = strtok(buf, " ");
+            if(0 != strcmp(s, "al")) {
+                skip++;
+                continue;
             }
+            if (!(s = strtok(NULL, " ")) || !(label = strtok(NULL, " \n"))) {
+                skip++;
+                continue;
+            }
+            if (*label == '.') label++;
+            if (!(*label) || strchr(label, ':')) {
+                skip++;
+                continue;
+            }
+            ok++;
+            add_symbol(label, (uint16_t)strtol(s, NULL, 16));
         }
-        if (fail) printf("Skipped %d lines from %s\n", fail, labelfile);
+        printf("Imported %d labels from %s.  Skipped %d lines (locals or malformed).\n", ok, labelfile, skip);
         fclose(f);
     }
     puts("Type ? for help, ctrl-C to interrupt, quit to exit.");

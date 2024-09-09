@@ -2,7 +2,7 @@ These are basic tests of monitor functionality using a tiny wozmon image.
 
 Rebuild wozmon.rom and wozmon.sym if required:
 
-    64tass --nostart --labels=wozmon.sym --output wozmon.rom wozmon.asm
+    64tass --nostart --vice-labels --labels=wozmon.sym --output wozmon.rom wozmon.asm
 
 Run the tests like:
 

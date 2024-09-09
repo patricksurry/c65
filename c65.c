@@ -255,7 +255,7 @@ int main(int argc, char *argv[]) {
             "-s <addr>  : Start executing at addr instead of via reset vector\n"
             "-m <addr>  : Set magic IO base address (default 0xf000)\n"
             "-b <file>  : Use binary file for magic block storage\n"
-            "-l <file>  : Read labels from file (implies -g)\n"
+            "-l <file>  : Read VICE format labels from file (implies -g)\n"
             "-x         : BRK should reset via $fffe rather than exit (implied by -g)\n"
             "-g         : Run with interactive debugger\n"
             "-gg        : Debug but don't break on startup\n"
