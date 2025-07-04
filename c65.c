@@ -222,7 +222,8 @@ int main(int argc, char *argv[]) {
 
       case 'l':
         labelfile = optarg;
-        /* fall through */
+        break;
+
       case 'g':
         debug++;
         /* fall through */
@@ -274,6 +275,9 @@ int main(int argc, char *argv[]) {
   if (start >= 0)
     pc = (uint16_t)start;
   show_cpu();
+
+  /* -l implies debug, but don't want -g -l to behave like -gg, see #3 */
+  if (labelfile && !debug) debug = 1;
 
   io_init(debug);
   if (debug) monitor_init(labelfile);
