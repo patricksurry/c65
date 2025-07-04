@@ -9,3 +9,9 @@ TODO
 
 - disassemble backward from PC would be handy but seems indeterminate, e.g. bytes $20 $80 $60 before
   PC could be JSR $6080, BRA $60 or RTS.  can deduce where opcodes land if you have heatx data
+
+- mmap memmory
+
+- linenoiseSetHintsCallback(hints) for command help
+
+- ctrl-c should clear prompt after break

@@ -6,7 +6,9 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <ctype.h>
-
+#include <sys/mman.h>
+#include <time.h>
+#include <errno.h>
 
 #define FAKE6502_NOT_STATIC 1
 #include "fake65c02.h"
@@ -15,7 +17,7 @@
 #include "monitor.h"
 
 
-uint8_t memory[0x10000];
+uint8_t *memory;    /* mmap'd */
 uint8_t breakpoints[0x10000];
 uint64_t heat_rs[0x10000];
 uint64_t heat_ws[0x10000];
@@ -197,8 +199,11 @@ int main(int argc, char *argv[]) {
   int addr = -1, start = -1, debug = 0, errflg = 0, c;
   int brk_action = MONITOR_EXIT;
   uint16_t over_addr;
+  time_t last_ns = 0, clock_ns = 0;
+  struct timespec ts, delay = {0,0};
 
-  while ((c = getopt(argc, argv, "xgr:a:s:m:b:l:")) != -1) {
+
+  while ((c = getopt(argc, argv, "xgr:a:s:m:b:l:c:")) != -1) {
     switch (c) {
       case 'r':
         romfile = optarg;
@@ -214,6 +219,10 @@ int main(int argc, char *argv[]) {
 
       case 'm':
         io_addr = strtol(optarg, NULL, 0);
+        break;
+
+      case 'c':
+        clock_ns = strtol(optarg, NULL, 0);
         break;
 
       case 'b':
@@ -256,6 +265,7 @@ int main(int argc, char *argv[]) {
             "-m <addr>  : Set magic IO base address (default 0xf000)\n"
             "-b <file>  : Use binary file for magic block storage\n"
             "-l <file>  : Read VICE format labels from file (implies -g)\n"
+            "-c <ns>    : Simulation clock cycle in nanoseconds, e.g. 1000 for 1MHz\n"
             "-x         : BRK should reset via $fffe rather than exit (implied by -g)\n"
             "-g         : Run with interactive debugger\n"
             "-gg        : Debug but don't break on startup\n"
@@ -263,6 +273,20 @@ int main(int argc, char *argv[]) {
     exit(2);
   }
 
+/* todo need to check / force 64K file size; make name an option, else tmpfile? */
+  int fdmem;
+  fdmem = open("c65.mem", O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+  printf("fdmem %d\n", fdmem);
+  if (fdmem < 0) {
+    printf("open failed: %s\n", strerror(errno));
+    exit(-1);
+  }
+  ftruncate(fdmem, 0x10000);
+  memory = mmap(NULL, 0x10000, PROT_READ | PROT_WRITE, MAP_SHARED, fdmem, 0);
+  if (memory == MAP_FAILED) {
+    printf("mmap failed: %s\n", strerror(errno));
+    exit(-1);
+  }
   if (load_memory(romfile, addr) != 0) exit(3);
 
   reset6502();
@@ -301,7 +325,15 @@ int main(int argc, char *argv[]) {
         over_addr = pc+3;
       }
       heat_xs[pc]++;
-      ticks += step6502();
+      ticks += (c = step6502());
+      if (clock_ns) {
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        if (ts.tv_nsec >= last_ns && ts.tv_nsec - last_ns < c * clock_ns) {
+          delay.tv_nsec = c * clock_ns - (ts.tv_nsec - last_ns);
+          nanosleep(&delay, NULL);
+        }
+        last_ns = ts.tv_nsec;
+      }
       if (step_mode == STEP_OVER && pc == over_addr) step_mode = STEP_NEXT;
       if (opcode == 0x00) break_flag |= brk_action;  /* BRK ? */
       if (breakpoints[pc] & MONITOR_PC) {

@@ -10,6 +10,7 @@ typedef struct Symbol {
 } Symbol;
 
 extern const char *pexpr;
+extern Symbol* symbols;
 
 void add_symbol(const char* name, uint16_t value);
 const Symbol* get_symbol(const char *name);

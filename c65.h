@@ -17,7 +17,7 @@
 #define STEP_OVER 3
 #define STEP_RUN 4
 
-extern uint8_t memory[0x10000];
+extern uint8_t *memory;
 extern uint8_t breakpoints[0x10000];
 
 extern uint16_t pc;

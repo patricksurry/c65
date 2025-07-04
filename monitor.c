@@ -781,13 +781,32 @@ void do_cmd() {
     puts("Unknown command, try ? for help");
 }
 
-
 void completion(const char *buf, linenoiseCompletions *lc, void *user_data) {
-    int i;
-    if (!strlen(buf)) return;
-    for(i=0; i<n_cmds; i++) {
-        if(!strncmp(buf, _cmds[i].name, strlen(buf))) {
-            linenoiseAddCompletion(lc, _cmds[i].name);
+    Symbol *sym;
+    const char *s = strrchr(buf, ' ');
+    char suggest[1024];
+    int i, n = strlen(buf);
+
+    if (!n) return;
+    if (!s) {
+        /* autocomplete command if no spaces in command yet */
+        for(i=0; i<n_cmds; i++) {
+            if(!strncmp(buf, _cmds[i].name, n)) {
+                linenoiseAddCompletion(lc, _cmds[i].name);
+            }
+        }
+    } else {
+        s++;
+        n -= s - buf;
+        if (!n) return;
+
+        /* autocomplete on symbols after initial command */
+        for(sym=symbols; sym; sym = sym->next) {
+            if(!strncmp(s, sym->name, n)) {
+                strncpy(suggest, buf, s-buf);
+                suggest[s-buf] = '\0';
+                linenoiseAddCompletion(lc, strcat(suggest, sym->name));
+            }
         }
     }
 }
