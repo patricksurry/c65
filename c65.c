@@ -9,11 +9,11 @@
 
 
 #define FAKE6502_NOT_STATIC 1
+#include "version.h"
 #include "fake65c02.h"
 #include "c65.h"
 #include "magicio.h"
 #include "monitor.h"
-
 
 uint8_t memory[0x10000];
 uint8_t breakpoints[0x10000];
@@ -198,7 +198,7 @@ int main(int argc, char *argv[]) {
   int brk_action = MONITOR_EXIT;
   uint16_t over_addr;
 
-  while ((c = getopt(argc, argv, "xgr:a:s:m:b:l:")) != -1) {
+  while ((c = getopt(argc, argv, "vxgr:a:s:m:b:l:")) != -1) {
     switch (c) {
       case 'r':
         romfile = optarg;
@@ -235,6 +235,10 @@ int main(int argc, char *argv[]) {
         errflg++;
         break;
 
+      case 'v':
+        fprintf(stderr, "c65 version %s\n", SEMANTIC_VERSION);
+        exit(1);
+
       case '?':
         fprintf(stderr, "Unrecognized option: '-%c'\n", optopt);
         errflg++;
@@ -250,6 +254,7 @@ int main(int argc, char *argv[]) {
             "Usage: c65 -r file.rom [...]\n"
             "Options:\n"
             "-?         : Show this message\n"
+            "-v         : Show semantic version\n"
             "-r <file>  : Load file and reset into it via address at fffc\n"
             "-a <addr>  : Load at address instead of aligning to end of memory\n"
             "-s <addr>  : Start executing at addr instead of via reset vector\n"
