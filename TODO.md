@@ -1,5 +1,9 @@
 TODO
 
+- [bug] adding -l seems to be equivalent to a -g, so -g vs -gg behavior changes if you have -l or not?
+
+- add a 'quiet' option to suppress initial output for tests etc
+
 - `continue <input>` would be useful to consume input and break on eof, e.g. for test coverage or
   batching an initial section of working code
 
