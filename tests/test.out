@@ -1,0 +1,321 @@
+c65: reading tests/wozmon.rom to $ff00:$ffff
+c65: PC=ff00 A=00 X=00 Y=00 S=fd FLAGS=<N0 V0 B0 D0 I1 Z0 C0> ticks=0
+Imported 37 labels from tests/wozmon.sym.  Skipped 0 lines (locals or malformed).
+Type ? for help, ctrl-C to interrupt, quit to exit.
+RESET:
+*  ff00  d8          cld  
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > ; a few simple tests based on wozmon rom
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > quit extraneous     ; trailing text warning
+unexpected
+    quit extraneous
+---------^
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > disassemble
+RESET:
+*  ff00  d8          cld  
+   ff01  58          cli  
+   ff02  a0 7f       ldy  #$7f
+   ff04  98          tya  
+NOTCR:
+   ff05  c9 df       cmp  #$df
+   ff07  f0 13       beq  BACKSPACE ; +19
+   ff09  c9 9b       cmp  #$9b
+   ff0b  f0 03       beq  ESCAPE ; +3
+   ff0d  c8          iny  
+   ff0e  10 0f       bpl  NEXTCHAR ; +15
+ESCAPE:
+   ff10  a9 dc       lda  #$dc
+   ff12  20 e6 ff    jsr  ECHO
+GETLINE:
+   ff15  a9 8d       lda  #$8d
+   ff17  20 e6 ff    jsr  ECHO
+   ff1a  a0 01       ldy  #$1
+BACKSPACE:
+   ff1c  88          dey  
+   ff1d  30 f6       bmi  GETLINE ; -10
+NEXTCHAR:
+   ff1f  ad 04 f0    lda  GETC
+   ff22  f0 fb       beq  NEXTCHAR ; -5
+   ff24  09 80       ora  #$80
+   ff26  99 00 02    sta  IN,y
+   ff29  20 e6 ff    jsr  ECHO
+   ff2c  c9 8d       cmp  #$8d
+   ff2e  d0 d5       bne  NOTCR ; -43
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > DIS                 ; commands are case insensitve
+   ff30  a0 ff       ldy  #$ff
+   ff32  a9 00       lda  #$0
+   ff34  aa          tax  
+SETSTOR:
+   ff35  0a          asl  a
+SETMODE:
+   ff36  85 2b       sta  MODE
+BLSKIP:
+   ff38  c8          iny  
+NEXTITEM:
+   ff39  b9 00 02    lda  IN,y
+   ff3c  c9 8d       cmp  #$8d
+   ff3e  f0 d5       beq  GETLINE ; -43
+   ff40  c9 ae       cmp  #$ae
+   ff42  90 f4       bcc  BLSKIP ; -12
+   ff44  f0 f0       beq  SETMODE ; -16
+   ff46  c9 ba       cmp  #$ba
+   ff48  f0 eb       beq  SETSTOR ; -21
+   ff4a  c9 d2       cmp  #$d2
+   ff4c  f0 3d       beq  RUN ; +61
+   ff4e  86 28       stx  L
+   ff50  86 29       stx  H
+   ff52  84 2a       sty  YSAV
+NEXTHEX:
+   ff54  b9 00 02    lda  IN,y
+   ff57  49 b0       eor  #$b0
+   ff59  c9 0a       cmp  #$a
+   ff5b  90 08       bcc  DIG ; +8
+   ff5d  49 20       eor  #$20
+   ff5f  69 88       adc  #$88
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > dis RESET . NOTCR
+RESET:
+*  ff00  d8          cld  
+   ff01  58          cli  
+   ff02  a0 7f       ldy  #$7f
+   ff04  98          tya  
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > d ESCAPE .. 6
+ESCAPE:
+   ff10  a9 dc       lda  #$dc
+   ff12  20 e6 ff    jsr  ECHO
+GETLINE:
+   ff15  a9 8d       lda  #$8d
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > d escape .. 6       ; error: labels are case sensitive (and not $e .. 6)
+unexpected
+    escape .. 6
+-----^
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > label alpha a000
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > unl alpha
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > label 6ty b000      ; invalid label
+Invalid label
+PC ff00  nv-bdIzc  A 00 X 00 Y 00 SP fd > set A 42            ; reserved labels are case insensitive
+PC ff00  nv-bdIzc  A 42 X 00 Y 00 SP fd > set x 10
+PC ff00  nv-bdIzc  A 42 X 10 Y 00 SP fd > set v 1
+PC ff00  nV-bdIzc  A 42 X 10 Y 00 SP fd > set c false         ; error, not C=$fa
+unexpected
+    false
+------^
+PC ff00  nV-bdIzc  A 42 X 10 Y 00 SP fd > set c 1
+PC ff00  nV-bdIzC  A 42 X 10 Y 00 SP fd > break PRBYTE + 1
+PC ff00  nV-bdIzC  A 42 X 10 Y 00 SP fd > call PRBYTE
+*B ffd4  4a          lsr  a
+PC ffd4  nV-bdIzC  A 42 X 10 Y 00 SP fa > step
+*  ffd5  4a          lsr  a
+PC ffd5  nV-bdIzc  A 21 X 10 Y 00 SP fa > s 3
+...
+*  ffd8  20 dc ff    jsr  PRHEX
+PC ffd8  nV-bdIzc  A 04 X 10 Y 00 SP fa > next
+4*  ffdb  68          pla  
+PC ffdb  NV-bdIzC  A b4 X 10 Y 00 SP fa > d
+*  ffdb  68          pla  
+PRHEX:
+   ffdc  29 0f       and  #$f
+   ffde  09 b0       ora  #$b0
+   ffe0  c9 ba       cmp  #$ba
+   ffe2  90 02       bcc  ECHO ; +2
+   ffe4  69 06       adc  #$6
+ECHO:
+   ffe6  48          pha  
+   ffe7  29 7f       and  #$7f
+   ffe9  c9 0d       cmp  #$d
+   ffeb  d0 02       bne  OUT ; +2
+   ffed  a9 0a       lda  #$a
+OUT:
+   ffef  8d 01 f0    sta  PUTC
+   fff2  68          pla  
+   fff3  60          rts  
+   fff4  00          brk  
+   fff5  00          brk  
+   fff6  00          brk  
+   fff7  00          brk  
+   fff8  00          brk  
+   fff9  00          brk  
+   fffa  00          brk  
+   fffb  00          brk  
+   fffc  00          brk  
+   fffd  ff 00 00    bbs7 $00,$0000  ; +0
+PC ffdb  NV-bdIzC  A b4 X 10 Y 00 SP fa > b $100.1ff r       ; break on any stack read
+PC ffdb  NV-bdIzC  A b4 X 10 Y 00 SP fa > inspect
+0024  XAML
+0025  XAMH
+0026  STL
+0027  STH
+0028  L
+0029  H
+002a  YSAV
+002b  MODE
+0100
+  break  r 0100.01fe
+0200  IN
+f001  PUTC
+f004  GETC
+ff00  RESET
+  break  x ff00
+ff05  NOTCR
+...
+hotspots: $1 read @ 01f8; $1 write @ 01f8; $1 execute @ ffd3
+PC ffdb  NV-bdIzC  A b4 X 10 Y 00 SP fa > c
+01fb: memory read
+       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+01f0  00 00 00 00 00 00 00 00  b4 da ff 42 ff fe 00     |...........B... |
+PRHEX:
+*  ffdc  29 0f       and  #$f
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > stack
+       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+01f0                                       ff fe 00 00  |            ....|
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > ; test some simple expressions
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > ~ 32 #50 1+3*2 (1+3)*2
+32 	:=  $32  #50  %110010  '2
+#50 	:=  $32  #50  %110010  '2
+1+3*2 	:=  $7  #7  %111
+(1+3)*2	:=  $8  #8  %1000
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > ~ (<(1 ? -1 : 2)) (<(0 ? 2 : -1)) 1234 & $ff
+(<(1 ? -1 : 2)) 	:=  $ff  #255  %11111111
+(<(0 ? 2 : -1)) 	:=  $ff  #255  %11111111
+1234 & $ff	:=  $34  #52  %110100  '4
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > ~ 3 < 4  3 > 4  3 < 3 3 <= 3 4 >= 3
+3 < 4  	:=  $1  #1  %1
+3 > 4  	:=  $0  #0  %0
+3 < 3 	:=  $0  #0  %0
+3 <= 3 	:=  $1  #1  %1
+4 >= 3	:=  $1  #1  %1
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > ~ RESET = 3 3==3 RESET <> 3  3!=3
+RESET = 3 	:=  $0  #0  %0
+3==3 	:=  $1  #1  %1
+RESET <> 3  	:=  $1  #1  %1
+3!=3	:=  $0  #0  %0
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > fill 400..f 12 34
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > f 410 30 $31 '2 #51 %110100 35
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > f                   ; error: empty fill
+missing expression
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > mem 400
+       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+0400  12 34 12 34 12 34 12 34  12 34 12 34 12 34 12 00  |.4.4.4.4.4.4.4..|
+0410  30 31 32 33 35 00 00 00  00 00 00 00 00 00 00 00  |01235...........|
+0420  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0430  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > mem 400..20
+       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+0400  12 34 12 34 12 34 12 34  12 34 12 34 12 34 12 00  |.4.4.4.4.4.4.4..|
+0410  30 31 32 33 35 00 00 00  00 00 00 00 00 00 00 00  |01235...........|
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > mem 400 . 420
+       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+0400  12 34 12 34 12 34 12 34  12 34 12 34 12 34 12 00  |.4.4.4.4.4.4.4..|
+0410  30 31 32 33 35 00 00 00  00 00 00 00 00 00 00 00  |01235...........|
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > mem . 440
+       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+0420  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0430  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > mem .. 20
+       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+0440  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0450  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb >                     ; repeat empty command
+       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+0460  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0470  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0480  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0490  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > mem fffa..3
+       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+fff0                                 00 00 00           |          ...   |
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > mem fffa..20
+       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+fff0                                 00 00 00 ff 00 00  |          ......|
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > mem
+       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+0010                                 00 00 00 00 00 00  |          ......|
+0020  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0030  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0040  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0050  00 00 00 00 00 00 00 00  00 00                    |..........      |
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > dis fffa            ; check disassembly stops at end of memory
+   fffa  00          brk  
+   fffb  00          brk  
+   fffc  00          brk  
+   fffd  ff 00 00    bbs7 $00,$0000  ; +0
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > dis fffa..5
+   fffa  00          brk  
+   fffb  00          brk  
+   fffc  00          brk  
+   fffd  ff 00 00    bbs7 $00,$0000  ; +0
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > d fffa .. 10
+   fffa  00          brk  
+   fffb  00          brk  
+   fffc  00          brk  
+   fffd  ff 00 00    bbs7 $00,$0000  ; +0
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > f 20 34 12          ; $20 contains byte 34, word 1234
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > f 34 00 ff          ; $34 contains word $ff00
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > f 1234 1 2 3 4
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > m *20               ; dereference zp byte
+       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+0030              00 ff 00 00  00 00 00 00 00 00 00 00  |    ............|
+0040  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0050  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0060  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+0070  00 00 00 00                                       |....            |
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > label ptr 20
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > m @ptr              ; derefernce zp word (20 -> 1234)
+       0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f   0123456789abcdef
+1230              01 02 03 04  00 00 00 00 00 00 00 00  |    ............|
+1240  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+1250  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+1260  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+1270  00 00 00 00                                       |....            |
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > d @*ptr             ; dereference indirect zp word (20 -> 34 -> $ff00)
+RESET:
+ B ff00  d8          cld  
+   ff01  58          cli  
+   ff02  a0 7f       ldy  #$7f
+   ff04  98          tya  
+NOTCR:
+   ff05  c9 df       cmp  #$df
+   ff07  f0 13       beq  BACKSPACE ; +19
+   ff09  c9 9b       cmp  #$9b
+   ff0b  f0 03       beq  ESCAPE ; +3
+   ff0d  c8          iny  
+   ff0e  10 0f       bpl  NEXTCHAR ; +15
+ESCAPE:
+   ff10  a9 dc       lda  #$dc
+   ff12  20 e6 ff    jsr  ECHO
+GETLINE:
+   ff15  a9 8d       lda  #$8d
+   ff17  20 e6 ff    jsr  ECHO
+   ff1a  a0 01       ldy  #$1
+BACKSPACE:
+   ff1c  88          dey  
+   ff1d  30 f6       bmi  GETLINE ; -10
+NEXTCHAR:
+   ff1f  ad 04 f0    lda  GETC
+   ff22  f0 fb       beq  NEXTCHAR ; -5
+   ff24  09 80       ora  #$80
+   ff26  99 00 02    sta  IN,y
+   ff29  20 e6 ff    jsr  ECHO
+   ff2c  c9 8d       cmp  #$8d
+   ff2e  d0 d5       bne  NOTCR ; -43
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > heat
+
+      0   1   2   3    4   5   6   7    8   9   a   b    c   d   e   f   
+0000         .                                                           
+1000                                                                     
+2000                                                                     
+3000                                                                     
+4000                                                                     
+5000                                                                     
+6000                                                                     
+7000                                                                     
+8000                                                                     
+9000                                                                     
+a000                                                                     
+b000                                                                     
+c000                                                                     
+d000                                                                     
+e000                                                                     
+f000  .                                                                 .
+
+rw- count 0   $1 . $2 : $4 + $8 = $10 * $20 # $40 @ $80 ($40 bytes/char)
+
+PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > q
