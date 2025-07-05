@@ -690,8 +690,7 @@ void cmd_heatmap() {
 
 void cmd_quit() {
     if (E_OK != parse_end()) return;
-    monitor_exit();
-    exit(0);
+    break_flag |= MONITOR_EXIT;
 }
 
 
@@ -835,10 +834,15 @@ void monitor_init(const char * labelfile) {
             ok++;
             add_symbol(label, (uint16_t)strtol(s, NULL, 16));
         }
-        printf("Imported %d labels from %s.  Skipped %d lines (locals or malformed).\n", ok, labelfile, skip);
+        if (!quiet)
+            printf(
+                "Imported %d labels from %s.  Skipped %d lines (locals or malformed).\n",
+                ok, labelfile, skip
+            );
         fclose(f);
     }
-    puts("Type ? for help, ctrl-C to interrupt, quit to exit.");
+    if (!quiet)
+        puts("Type ? for help, ctrl-C to interrupt, quit to exit.");
 }
 
 void monitor_exit() {

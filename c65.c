@@ -7,7 +7,6 @@
 #include <inttypes.h>
 #include <ctype.h>
 
-
 #define FAKE6502_NOT_STATIC 1
 #include "version.h"
 #include "fake65c02.h"
@@ -23,7 +22,7 @@ uint64_t heat_xs[0x10000];
 
 uint64_t ticks = 0;
 
-int break_flag = 0, step_mode = STEP_RUN, step_target = -1;
+int break_flag = 0, step_mode = STEP_RUN, step_target = -1, quiet = 0;
 uint16_t rw_brk;
 
 static uint8_t _opmodes[256] = { 255 };
@@ -163,7 +162,8 @@ int load_memory(const char* romfile, int addr) {
   rewind(fin);
   if (addr < 0)
     addr = 0x10000 - sz;
-  printf("c65: reading %s to $%04x:$%04x\n", romfile, addr, addr+sz-1);
+  if (!quiet)
+    printf("c65: reading %s to $%04x:$%04x\n", romfile, addr, addr+sz-1);
   fread(memory + addr, 1, sz, fin);
   fclose(fin);
   return 0;
@@ -176,20 +176,23 @@ int save_memory(const char* romfile, uint16_t start, uint16_t end) {
     fprintf(stderr, "Error writing %s\n", romfile);
     return -1;
   }
-  printf("c65: writing $%04x:$%04x to %s", start, end, romfile);
+  if (!quiet)
+    printf("c65: writing $%04x:$%04x to %s", start, end, romfile);
   fwrite(memory+start, 1, (end < start ? 0x10000 : end) - start + 1, fout);
   fclose(fout);
   return 0;
 }
 
 void show_cpu() {
-  printf(
+  if (!quiet)
+    printf(
       "c65: PC=%04x A=%02x X=%02x Y=%02x S=%02x FLAGS=<N%d V%d B%d D%d I%d Z%d "
       "C%d> ticks=%" PRIu64 "\n",
       pc, a, x, y, sp, status & FLAG_SIGN ? 1 : 0,
       status & FLAG_OVERFLOW ? 1 : 0, status & FLAG_BREAK ? 1 : 0,
       status & FLAG_DECIMAL ? 1 : 0, status & FLAG_INTERRUPT ? 1 : 0,
-      status & FLAG_ZERO ? 1 : 0, status & FLAG_CARRY ? 1 : 0, ticks);
+      status & FLAG_ZERO ? 1 : 0, status & FLAG_CARRY ? 1 : 0, ticks
+    );
 }
 
 int main(int argc, char *argv[]) {
@@ -198,7 +201,7 @@ int main(int argc, char *argv[]) {
   int brk_action = MONITOR_EXIT;
   uint16_t over_addr;
 
-  while ((c = getopt(argc, argv, "vxgr:a:s:m:b:l:")) != -1) {
+  while ((c = getopt(argc, argv, "vxgqr:a:s:m:b:l:")) != -1) {
     switch (c) {
       case 'r':
         romfile = optarg;
@@ -236,6 +239,10 @@ int main(int argc, char *argv[]) {
         errflg++;
         break;
 
+      case 'q':
+        quiet = 1;
+        break;
+
       case 'v':
         fprintf(stderr, "c65 version %s\n", SEMANTIC_VERSION);
         exit(1);
@@ -256,6 +263,7 @@ int main(int argc, char *argv[]) {
             "Options:\n"
             "-?         : Show this message\n"
             "-v         : Show semantic version\n"
+            "-q         : Quiet, suppress informational output\n"
             "-r <file>  : Load file and reset into it via address at fffc\n"
             "-a <addr>  : Load at address instead of aligning to end of memory\n"
             "-s <addr>  : Start executing at addr instead of via reset vector\n"
@@ -265,7 +273,7 @@ int main(int argc, char *argv[]) {
             "-x         : BRK should reset via $fffe rather than exit (implied by -g)\n"
             "-g         : Run with interactive debugger\n"
             "-gg        : Debug but don't break on startup\n"
-            "Note: address arguments can be specified in hex like 0x1234\n");
+            "Note: write <addr> like 8192 (decimal) or 0x2000 (hex)\n");
     exit(2);
   }
 
@@ -300,10 +308,15 @@ int main(int argc, char *argv[]) {
   while (!(break_flag & MONITOR_EXIT)) {
     if (debug) {
       /* -gg skips initial break */
-      if (debug == 1) do monitor_command(); while (step_mode == STEP_NONE) ;
+      if (debug == 1) {
+        do {
+          monitor_command();
+        } while (step_mode == STEP_NONE && !(break_flag & MONITOR_EXIT)) ;
+      }
       debug = 1;
     }
-    break_flag = 0;
+    /* clear break flag except monitor exit status */
+    break_flag &= MONITOR_EXIT;
     while (!break_flag && (step_mode == STEP_RUN || step_target)) {
       if (step_mode == STEP_NEXT && memory[pc] == 0x20) { /* JSR ? */
         step_mode = STEP_OVER;

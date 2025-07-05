@@ -27,7 +27,7 @@ extern uint16_t rw_brk;
 extern uint64_t heat_rs[0x10000], heat_ws[0x10000], heat_xs[0x10000];
 
 extern uint64_t ticks;
-extern int break_flag, step_mode, step_target;
+extern int break_flag, step_mode, step_target, quiet;
 
 const char* opname(uint8_t op);
 uint8_t oplen(uint8_t op);

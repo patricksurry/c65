@@ -1,4 +1,4 @@
-CCFLAGS=-Wall
+CCFLAGS=-Wall -fno-common
 
 # Detect if running on native Windows:
 ifeq ($(OS),Windows_NT)
@@ -15,6 +15,7 @@ c65: $(CSRC) $(CHDR)
 
 tests: c65 tests/test.in
 	./c65 -r tests/wozmon.rom -l tests/wozmon.sym < tests/test.in | perl -pe 's/\x1b\[[0-9;]*[mG]//g' > tests/test.out
+	git --no-pager diff --name-status tests
 
 clean:
 	rm -f *.o c65 c65.exe
