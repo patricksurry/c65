@@ -319,3 +319,4 @@ f000  .                                                                 .
 rw- count 0   $1 . $2 : $4 + $8 = $10 * $20 # $40 @ $80 ($40 bytes/char)
 
 PC ffdc  nV-bdIzC  A 42 X 10 Y 00 SP fb > q
+c65: PC=ffdc A=42 X=10 Y=00 S=fb FLAGS=<N0 V1 B0 D0 I1 Z0 C1> ticks=54
