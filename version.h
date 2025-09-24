@@ -1,1 +1,1 @@
-const char* SEMANTIC_VERSION = "1.1.1";
+const char* SEMANTIC_VERSION = "1.2.1";

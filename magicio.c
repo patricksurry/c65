@@ -100,6 +100,9 @@ FILE *fblk = NULL;
 int io_addr = 0xf000;
 long mark = 0;    // used for timer
 
+uint16_t blk0 = 0; // block base in 64Kb steps
+uint8_t blksz = 10; // block size as 2^n
+
 #define io_putc   (io_addr + 1)
 #define io_kbhit  (io_addr + 3)
 #define io_getc   (io_addr + 4)
@@ -163,14 +166,23 @@ void io_magic_write(uint16_t addr, uint8_t val) {
       if (val < 3) {
         blkiop->status = 0;
         if (val == 1 || val == 2) {
-          fseek(fblk, 1024 * blkiop->blknum, SEEK_SET);
+          fseek(fblk, (blk0 << 16) + (blkiop->blknum << blksz), SEEK_SET);
           if (val == 1) {
-            fread(memory + blkiop->bufptr, 1024, 1, fblk);
+            fread(memory + blkiop->bufptr, 1 << blksz, 1, fblk);
           } else {
-            fwrite(memory + blkiop->bufptr, 1024, 1, fblk);
+            fwrite(memory + blkiop->bufptr, 1 << blksz, 1, fblk);
             fflush(fblk);
           }
         }
+      } else if ((val & 0xf0) == 16) {
+        // configure block base and size
+        blksz = val & 0x0f;
+        blk0 = blkiop->blknum;
+        blkiop->status = 0;
+      } else if ((val & 0xf0) == 32) {
+        // report block base and size
+        blkiop->status = blksz;
+        blkiop->blknum = blk0;
       }
     }
   }

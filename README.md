@@ -3,7 +3,8 @@
 that mimics [`pymon`](https://github.com/mnaberez/py65)'s
 default magic getc and putc interface.
 `c65` also provides a magic [blockio](#blockio) interface
-which supports simulator IO to/from an external binary file,
+which can emulate multiple IO devices and
+memory paging/banking using an external binary file,
 as well as a simple [profiling debugger](#debugger).
 
 ![heatmap](heatmap.png "Heatmap profiling in c65")
@@ -57,42 +58,43 @@ The base address (default $f010) is the first byte of a six byte interface:
     4-5     bufptr  I   low-endian pointer to 1024 byte buffer to r/w
 
 To initiate a block IO operation, set the `blknum` and `bufptr` parameters
-and then write the `action` code to the base address. The `status`
-value is returned. Four actions are currently supported:
+and then write the `action` byte to the base address. The `status`
+byte is returned. Several actions are currently supported:
 
 - status (0): query blkio status: sets `status` to 0x0 if enabled, 0xff otherwise
 - read (1): read the 1024 byte block @ `blknum` to `bufptr`
 - write (2): write 1024 bytes from `bufptr` to the block @ `blknum`
+- setcfg (16 + *n*): set block size to 2^*n*, *n* <= 15 (ie. 1 byte to 32Kb), 
+    based at file offset `blknum` in 64Kb steps.  Default *n* = 10, base = 0.
+- getcfg (32): set `status` to blocksize 0 <= *n* <= 15, 
+    and `blknum` to the base offset in 64Kb steps.
 
-Note that an external blockfile must be specified with the `-b ...` option
-to enable block IO. The file is simply a binary file with block k
-mapped to offset k*1024 through (k+1)*1024-1.
-The two-byte `blknum` supports a maximum addressable file size of 64Mb.
+Note that block IO is only enabled when an external blockfile is specified 
+using the `-b ...` option.   The file is simply a binary file 
+with block *k* mapped to *base* + *k* 2^*n* through 
+*base* + (*k* + 1) 2^*n* - 1.
+
+The default block size is 1024 bytes (*n* = 10) to match typical Forth usage, 
+which gives a maximum addressable size of 64Mb with the two-byte `blknum`.
+However it's easy to provide much more storage, emulate a variety of IO devices
+and memory banking/paging using `setcfg` and `getcfg`.
+For example a floppy disc might use 256 byte sectors mapped to one section
+of the blockfile; an SD card or ProDOS device could use 512 byte blocks in another section; with yet another section providing virtual memory 
+with blocks of memory dumped to the device before new blocks are swapped in.
+
 A portable (cross-platform) check for blkio availability is:
 1. write 1 to `status`
 2. write 0 to `action`
 3. test if `status` is now 0
 
-You can boot from a blkio file by adding the following snippet to
-the end of `forth_code/user_words.fs`:
-
-    \ if blkio is available and block 0 starts with the bytes 'TF'
-    \ `evaluate` the remainder of block 0 as a zero-terminated string
-    \ Tequires the word asciiz> ( addr -- addr n )
-
-    : blkrw ( blk buf action -- )
-        -rot $c014 ! $c012 ! $c010 c!
-    ;
-    :noname
-        1 $c011 c! 0 $c010 c! $c011 c@ 0= if  \ blkio available?
-            0 $1000 1 blkrw
-            $1000 @ $4654 = if                \ starts with magic "TF" ?
-                $1002 asciiz> evaluate else   \ run the block
-                ." bad boot block" CR
-            then else
-            ." no block device" CR
-        then
-    ; execute
+You can also boot from a blkio file by arranging for your kernel
+to read and execute code from there.   For example in
+[TaliForth](https://github.com/SamCoVT/TaliForth2)
+simply invoke `BLOCK-BOOT` from examples/words/block-ext.asm 
+at startup in your platform_forth.fs file.
+If blkio is available and block 0 starts with the bytes 'TF'
+the rest of the block will be evaluated as Forth code.
+Obviously many other schemes are possible.
 
 ## Debugger
 
