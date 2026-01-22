@@ -100,8 +100,9 @@ FILE *fblk = NULL;
 int io_addr = 0xf000;
 long mark = 0;    // used for timer
 
-uint16_t blk0 = 0; // block base in 64Kb steps
-uint8_t blksz = 10; // block size as 2^n
+// device base offset in 64Kb steps (default 0), block size as 2^n (default 1Kb)
+uint16_t dvc_offset[16] = {0};
+uint8_t dvc_blksz[16] = {10,10,10,10, 10,10,10,10, 10,10,10,10, 10,10,10,10};
 
 #define io_putc   (io_addr + 1)
 #define io_kbhit  (io_addr + 3)
@@ -161,28 +162,33 @@ void io_magic_write(uint16_t addr, uint8_t val) {
   if (addr == io_putc) {
     _putc(val);
   } else if (addr == io_blkio) {
+    // block IO 'action' command
     blkiop->status = 0xff;
     if (fblk) {
-      if (val < 3) {
-        blkiop->status = 0;
-        if (val == 1 || val == 2) {
-          fseek(fblk, (blk0 << 16) + (blkiop->blknum << blksz), SEEK_SET);
+      uint8_t dvc = val >> 4;
+      val &= 0xf;
+      blkiop->status = 0;
+
+      switch (val) {
+        case 0:   // status
+          blkiop->blknum = (dvc_offset[dvc] << 4) | dvc_blksz[dvc];
+          break;
+        case 7:   // configure
+          dvc_blksz[dvc] = blkiop->blknum & 0xf;
+          dvc_offset[dvc] = blkiop->blknum >> 4;
+          break;
+        case 1:   // read
+        case 2:   // write
+          fseek(fblk, (dvc_offset[dvc] << 16) + (blkiop->blknum << dvc_blksz[dvc]), SEEK_SET);
           if (val == 1) {
-            fread(memory + blkiop->bufptr, 1 << blksz, 1, fblk);
+            fread(memory + blkiop->bufptr, 1 << dvc_blksz[dvc], 1, fblk);
           } else {
-            fwrite(memory + blkiop->bufptr, 1 << blksz, 1, fblk);
+            fwrite(memory + blkiop->bufptr, 1 << dvc_blksz[dvc], 1, fblk);
             fflush(fblk);
           }
-        }
-      } else if ((val & 0xf0) == 16) {
-        // configure block base and size
-        blksz = val & 0x0f;
-        blk0 = blkiop->blknum;
-        blkiop->status = 0;
-      } else if ((val & 0xf0) == 32) {
-        // report block base and size
-        blkiop->status = blksz;
-        blkiop->blknum = blk0;
+          break;
+        default:  // return unknown non-zero command as status
+          blkiop->status = val;
       }
     }
   }

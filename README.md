@@ -17,7 +17,7 @@ The simplest usage is:
 
 This loads the TaliForth2 memory image at the top of memory
 and resets to the address stored at $fffc. This corresponds exactly to
-`py65mon -m 65c02 -r taliforth-py65mon.bin` without the monitor tools.
+`py65mon -m 65c02 -r taliforth-py65mon.bin`.
 Various options control the simulator (use `c65 -?` for current options):
 
     -a <address>    # load the rom file at a specific address
@@ -28,8 +28,8 @@ Various options control the simulator (use `c65 -?` for current options):
 
 ## Magic IO
 
-`c65` provides a magic IO block that spans a 22 byte range
-and is normally based at $f000. Use `-m` to change the base address.
+`c65` provides a magic IO block that spans a 22 byte range,
+based at $f000 by default. Use `-m` to change the base address.
 This supports a number of IO functions:
 
     Addr    Name    Description
@@ -42,12 +42,21 @@ This supports a number of IO functions:
     $f007   stop    Reading here stops the cycle counter
     $f008-b cycles  Current 32 bit cycle count in NUXI order
 
+    $f00c-f -       Unused
+
     $f010   blkio   Write here to execute a block IO action (see below)
     $f011   status  Read block IO status here
     $f012-3 blknum  Block number to read/write
     $f014-5 buffer  Start of 1024 byte memory buffer to read/write
 
 ## Block IO
+
+Block IO supports virtual memory with an external binary file
+to emulate storage devices, memory banking and paging.
+To enable block IO, specify a block file using the `-b ...` option.
+Up to 16 virtual block devices can be mapped to regions of the file.
+By default all devices map 1Kb blocks from the start of the file,
+but this can be configured dynamically from 65c02 code (see below).
 
 The base address (default $f010) is the first byte of a six byte interface:
 
@@ -58,36 +67,53 @@ The base address (default $f010) is the first byte of a six byte interface:
     4-5     bufptr  I   low-endian pointer to 1024 byte buffer to r/w
 
 To initiate a block IO operation, set the `blknum` and `bufptr` parameters
-and then write the `action` byte to the base address. The `status`
-byte is returned. Several actions are currently supported:
+and then write the `action` byte.
+The `status` byte is returned. 
+The top nibble of `action` specifies a device (0-15)
+with the low nibble defining the command.  The following commands 
+are currently supported:
 
-- status (0): query blkio status: sets `status` to 0x0 if enabled, 0xff otherwise
-- read (1): read the 1024 byte block @ `blknum` to `bufptr`
-- write (2): write 1024 bytes from `bufptr` to the block @ `blknum`
-- setcfg (16 + *n*): set block size to 2^*n*, *n* <= 15 (ie. 1 byte to 32Kb), 
-    based at file offset `blknum` in 64Kb steps.  Default *n* = 10, base = 0.
-- getcfg (32): set `status` to blocksize 0 <= *n* <= 15, 
-    and `blknum` to the base offset in 64Kb steps.
-
-Note that block IO is only enabled when an external blockfile is specified 
-using the `-b ...` option.   The file is simply a binary file 
-with block *k* mapped to *base* + *k* 2^*n* through 
-*base* + (*k* + 1) 2^*n* - 1.
-
-The default block size is 1024 bytes (*n* = 10) to match typical Forth usage, 
-which gives a maximum addressable size of 64Mb with the two-byte `blknum`.
-However it's easy to provide much more storage, emulate a variety of IO devices
-and memory banking/paging using `setcfg` and `getcfg`.
-For example a floppy disc might use 256 byte sectors mapped to one section
-of the blockfile; an SD card or ProDOS device could use 512 byte blocks in another section; with yet another section providing virtual memory 
-with blocks of memory dumped to the device before new blocks are swapped in.
-
-A portable (cross-platform) check for blkio availability is:
+- **status** (*dvc* | 0): query blkio status.  
+    Sets `status` to 0x0 if block devices are available, 
+    and 0xff otherwise.  Sets `blknum` to device configuration word.
+- **read** (*dvc* | 1): read the device block `blknum` to address `bufptr`.
+- **write** (*dvc* | 2): write one block from `bufptr` to device block `blknum`.
+- **configure** (*dvc* | 7): use the value in `blknum` to 
+    configure how *dvc* maps to the block file (see below).
+    
+A portable (cross-platform) check for blkio availability from 65c02 code is:
 1. write 1 to `status`
 2. write 0 to `action`
 3. test if `status` is now 0
 
-You can also boot from a blkio file by arranging for your kernel
+### Block device configuration
+
+The configure operation sets the block size and starting file offset
+for the virtual *dvc* specified in the `action` byte.  
+The low four bits *nnnn* of `blknum` set the device block size to 2^*nnnn*,
+i.e. 1 byte to 32Kb.
+The high 12 bits of `blknum` set the offset of block 0 
+in the block file in 64Kb units.
+For example writing (1 << 4) | 7 = 23 to `action` 
+with `blknum` set to (3 << 4) | 8 = 24 would configure
+virtual device 1 with 256 byte blocks, 
+with block 0 at file offset 192Kb.
+
+By default all 16 virtual devices are configured with 1024 byte blocks starting
+from the beginning of the file (i.e. `blknum` = 0 | 0xa).
+Each device can address up to 64K blocks with no bounds nor overlap checking.
+(It can be useful to have several devices mapped to the same virtual memory
+with different block sizes.)
+For example a floppy disc might use 256 byte sectors mapped to one section
+of the blockfile;
+an SD card or ProDOS device could use 512 byte blocks in another section; 
+with yet another section used to emulate memory banks or pages
+where active memory regions are dumped to the device 
+before new blocks are swapped in.
+
+### Booting from a block device
+
+You can boot from a blkio file by arranging for your 65c02 kernel
 to read and execute code from there.   For example in
 [TaliForth](https://github.com/SamCoVT/TaliForth2)
 simply invoke `BLOCK-BOOT` from examples/words/block-ext.asm 
