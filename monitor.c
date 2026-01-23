@@ -125,13 +125,23 @@ int save_heatmap(const char* fname, uint16_t start, uint16_t end, int mode) {
     return 0;
 }
 
-void heatmap(uint16_t start, uint16_t end, int mode) {
+uint64_t heat[0x10000];
+
+/* find top labeled addresses*/
+int compare(const void *a, const void *b) {
+    uint16_t adra = *(uint16_t*)a, adrb = *(uint16_t*)b;
+    return heat[adrb] - heat[adra]; // descending order
+}
+
+void show_heatmap(uint16_t start, uint16_t end, int mode) {
     uint64_t data[1024], dmax, d;
-    int i, zoom, addr, endl;
+    uint16_t hotspots[0x10000];
+    int i, n, zoom, addr, endl;
+    const Symbol *sym;
 
     endl = end > start ? end : 0x10000;
 
-    /* figure out a scaling where we can round down start and encompass end.
+    /* find a scaling where we can round down start and encompass end.
        consider only even zoom levels since it makes labeling easier */
     for(zoom=0; /**/; zoom+=2)
         if (((start >> zoom) << zoom) + (1024 << zoom) >= endl) break;
@@ -142,12 +152,17 @@ void heatmap(uint16_t start, uint16_t end, int mode) {
     /* we aggregate by max to preserve the same scale as we zoom
         in some cases sum might be more useful but for max is better for finding hotspots */
     for(i=0; i<1024; i++) data[i] = 0;
+    for(i=0; i<0x10000; i++) heat[i] = 0;
     for(addr=start; addr < start + (1024 << zoom) && addr < 0x10000; addr++) {
+        heat[addr] = (
+            (mode & MONITOR_READ ? heat_rs[addr] : 0) +
+            (mode & MONITOR_WRITE ? heat_ws[addr] : 0) +
+            (mode & MONITOR_PC ? heat_xs[addr] : 0)
+        );
         i = (addr-start) >> zoom;
-        if (mode & MONITOR_READ && data[i] < heat_rs[addr]) data[i] = heat_rs[addr];
-        if (mode & MONITOR_WRITE && data[i] < heat_ws[addr]) data[i] = heat_ws[addr];
-        if (mode & MONITOR_PC && data[i] < heat_xs[addr]) data[i] = heat_xs[addr];
+        if (heat[addr] > data[i]) data[i] = heat[addr];
     }
+
     /*
     set up a log color scale by picking a number of bits for each bucket
     we'll assign our eight colors like so:
@@ -190,6 +205,39 @@ void heatmap(uint16_t start, uint16_t end, int mode) {
         printf(" %s $%" PRIx64, heatstr(d-1), d);
     }
     printf(" ($%x byte%s/char)\n\n", 1 << zoom, zoom ? "s": "");
+
+    if (symbols) {
+        /* show top labeled hotspots by zeroing out unlabeled indices */
+        for(i=0; i<0x10000; i++) hotspots[i] = 0;
+        for(n=0, sym = symbols; sym; sym = sym->next) {
+            if (start <= sym->value && sym->value < endl) {
+                n++;
+                hotspots[sym->value] = 1;
+            }
+        }
+        if (n == 0) return;
+
+        for(i=0; i<0x10000; i++) {
+            heat[i] = hotspots[i] ? heat[i] : 0;
+            hotspots[i] = i;
+        }
+        qsort(hotspots, 0x10000, sizeof(uint16_t), compare);
+        printf("addr     heat       labels\n");
+        for (i=0; i<16; i++) {
+            addr = hotspots[i];
+            d = heat[addr];
+            if (d == 0) break;
+            sym = get_next_symbol_by_value(NULL, addr);
+            if (!sym) continue;
+            printf("$%04x  %s $%08" PRIx64 "  ", addr, heatstr(d), d);
+            while (sym) {
+                printf("%s ", sym->name);
+                sym = get_next_symbol_by_value(sym, addr);
+            }
+            printf("\n");
+        }
+        printf("\n");
+    }
 }
 
 char* _fmt_addr(char *buf, uint16_t addr, int len) {
@@ -682,7 +730,7 @@ void cmd_heatmap() {
     }
 
     switch (cmd) {
-        case 0: heatmap(start, end, mode); break;
+        case 0: show_heatmap(start, end, mode); break;
         case 1: clear_heatmap(start, end, mode); break;
         case 2: (void)save_heatmap(fname, start, end, mode); break;
     }

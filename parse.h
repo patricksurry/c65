@@ -11,6 +11,7 @@ typedef struct Symbol {
 
 extern const char *pexpr;
 
+extern Symbol *symbols;
 void add_symbol(const char* name, uint16_t value);
 const Symbol* get_symbol(const char *name);
 const Symbol* get_next_symbol_by_value(const Symbol* sym, uint16_t value);
