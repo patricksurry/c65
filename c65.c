@@ -137,8 +137,8 @@ int set_reg_or_flag(const char *name, int v) {
         return 0;
     } else if (strlen(name) == 1 && (q = strchr(_flags, tolower(name[0])))) {
         bit = 1 << (7-(q-_flags));
-        if (bit) status |= bit;
-        else status ^= bit;
+        if (v) status |= bit;
+        else status &= ~bit;
         return 0;
     }
     return -1;
@@ -162,6 +162,11 @@ int load_memory(const char* romfile, int addr) {
   rewind(fin);
   if (addr < 0)
     addr = 0x10000 - sz;
+  if (addr < 0 || addr + sz > 0x10000) {
+    fprintf(stderr, "File %s ($%x bytes) doesn't fit in memory\n", romfile, sz);
+    fclose(fin);
+    return -1;
+  }
   if (!quiet)
     printf("c65: reading %s to $%04x:$%04x\n", romfile, addr, addr+sz-1);
   fread(memory + addr, 1, sz, fin);

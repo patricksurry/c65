@@ -55,6 +55,7 @@ The base address (default $f010) is the first byte of a six byte interface:
     1       status  O   returns 0 on success and 0xff otherwise
     2-3     blknum  I   0-indexed low-endian block to read or write
     4-5     bufptr  I   low-endian pointer to 1024 byte buffer to r/w
+                        (must be <= $fc00, else status is 0xff)
 
 To initiate a block IO operation, set the `blknum` and `bufptr` parameters
 and then write the `action` code to the base address. The `status`
