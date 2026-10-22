@@ -160,7 +160,8 @@ void io_magic_write(uint16_t addr, uint8_t val) {
   } else if (addr == io_blkio) {
     blkiop->status = 0xff;
     if (fblk) {
-      if (val < 3) {
+      /* reject buffers that would run past the end of memory */
+      if (val < 3 && (val == 0 || blkiop->bufptr <= 0x10000 - 1024)) {
         blkiop->status = 0;
         if (val == 1 || val == 2) {
           fseek(fblk, 1024 * blkiop->blknum, SEEK_SET);
